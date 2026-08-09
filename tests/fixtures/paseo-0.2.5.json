@@ -1,0 +1,123 @@
+{
+  "source": {
+    "id": "server-01",
+    "name": "Conqrex Server",
+    "serverId": "srv_fixture",
+    "hostname": "server-01",
+    "version": "0.2.5",
+    "connectionState": "Connected"
+  },
+  "workspaces": [
+    {
+      "id": "wks_engine_feature",
+      "projectId": "prj_engine",
+      "projectDisplayName": "Conqrex.Engine",
+      "projectRootPath": "/srv/dev/Conqrex.Engine",
+      "workspaceDirectory": "/srv/dev/worktrees/engine-rhi",
+      "projectKind": "git",
+      "workspaceKind": "worktree",
+      "name": "engine-rhi",
+      "status": "running",
+      "activityAt": "2026-08-09T10:20:00Z",
+      "gitRuntime": {
+        "currentBranch": "feat/rhi",
+        "remoteUrl": "git@github.com:Conqrex/Conqrex.Engine.git",
+        "isPaseoOwnedWorktree": true
+      },
+      "project": {
+        "projectKey": "remote:github.com/conqrex/conqrex.engine",
+        "projectName": "Conqrex.Engine",
+        "workspaceName": "engine-rhi",
+        "checkout": {
+          "cwd": "/srv/dev/worktrees/engine-rhi",
+          "isGit": true,
+          "currentBranch": "feat/rhi",
+          "remoteUrl": "git@github.com:Conqrex/Conqrex.Engine.git",
+          "worktreeRoot": "/srv/dev/worktrees/engine-rhi",
+          "isPaseoOwnedWorktree": true,
+          "mainRepoRoot": "/srv/dev/Conqrex.Engine"
+        }
+      }
+    }
+  ],
+  "agents": [
+    {
+      "agent": {
+        "id": "agent_working",
+        "provider": "claude",
+        "cwd": "/srv/dev/worktrees/engine-rhi",
+        "workspaceId": "wks_engine_feature",
+        "model": "claude-opus-4-1",
+        "createdAt": "2026-08-09T09:00:00Z",
+        "updatedAt": "2026-08-09T10:20:00Z",
+        "lastUserMessageAt": "2026-08-09T09:00:00Z",
+        "status": "running",
+        "capabilities": {
+          "supportsStreaming": true,
+          "supportsSessionPersistence": true
+        },
+        "currentModeId": "default",
+        "availableModes": [],
+        "pendingPermissions": [],
+        "persistence": null,
+        "lastUsage": {
+          "inputTokens": 1200,
+          "cachedInputTokens": 800,
+          "outputTokens": 300,
+          "totalCostUsd": 0.12,
+          "contextWindowUsedTokens": 18000,
+          "contextWindowMaxTokens": 200000
+        },
+        "title": "RHI implementation",
+        "labels": {},
+        "requiresAttention": false,
+        "attentionReason": null
+      },
+      "project": {
+        "projectKey": "remote:github.com/conqrex/conqrex.engine",
+        "projectName": "Conqrex.Engine",
+        "workspaceName": "engine-rhi",
+        "checkout": {
+          "cwd": "/srv/dev/worktrees/engine-rhi",
+          "isGit": true,
+          "currentBranch": "feat/rhi",
+          "remoteUrl": "https://github.com/Conqrex/Conqrex.Engine.git",
+          "worktreeRoot": "/srv/dev/worktrees/engine-rhi",
+          "isPaseoOwnedWorktree": true,
+          "mainRepoRoot": "/srv/dev/Conqrex.Engine"
+        }
+      }
+    }
+  ],
+  "turnCompleted": {
+    "agentId": "agent_working",
+    "timestamp": "2026-08-09T10:21:00Z",
+    "seq": 42,
+    "epoch": "epoch-a",
+    "event": {
+      "type": "turn_completed",
+      "provider": "claude",
+      "usage": {
+        "inputTokens": 1400,
+        "cachedInputTokens": 900,
+        "outputTokens": 420,
+        "totalCostUsd": 0.18,
+        "contextWindowUsedTokens": 20500,
+        "contextWindowMaxTokens": 200000
+      }
+    }
+  },
+  "question": {
+    "type": "agent_permission_request",
+    "payload": {
+      "agentId": "agent_working",
+      "request": {
+        "id": "question-1",
+        "provider": "claude",
+        "name": "AskUserQuestion",
+        "kind": "question",
+        "title": "Choose the migration strategy"
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+    "KPlugin": {
+        "Id": "com.conqrex.crewbeacon",
+        "Name": "CrewBeacon",
+        "Description": "KDE Plasma cockpit for AI quota, local and remote Paseo agents, attention, and repository usage.",
+        "Icon": "crewbeacon",
+        "Category": "System Information",
+        "License": "MIT",
+        "Version": "0.1.0",
+        "Authors": [
+            {
+                "Name": "S. Aydin Icen",
+                "Email": "saydinicen9@gmail.com"
+            }
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

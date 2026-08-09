@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name=""/>
+    <group name="General">
+        <entry name="refreshInterval" type="Int">
+            <label>Refresh interval in seconds</label>
+            <default>120</default>
+            <min>30</min>
+        </entry>
+        <entry name="warnThreshold" type="Int">
+            <label>Usage percent at which the gauge turns amber</label>
+            <default>70</default>
+        </entry>
+        <entry name="criticalThreshold" type="Int">
+            <label>Usage percent at which the gauge turns red</label>
+            <default>90</default>
+        </entry>
+        <entry name="gaugeStyle" type="String">
+            <label>Visual style: ring or bar</label>
+            <default>ring</default>
+        </entry>
+        <entry name="useSystemTheme" type="Bool">
+            <label>Use the Plasma color scheme instead of the CrewBeacon dark palette</label>
+            <default>false</default>
+        </entry>
+        <entry name="numberStyle" type="String">
+            <label>Number style: percent, binary or blocks</label>
+            <default>percent</default>
+        </entry>
+        <entry name="usageDisplay" type="String">
+            <label>Usage display mode: used or left</label>
+            <default>used</default>
+        </entry>
+        <entry name="accent" type="String">
+            <label>Accent: auto (threshold colors) or a named neon preset</label>
+            <default>auto</default>
+        </entry>
+        <entry name="showCompactValue" type="Bool">
+            <label>Show the value inside the panel ring</label>
+            <default>true</default>
+        </entry>
+        <entry name="showWeeklySonnet" type="Bool">
+            <label>Show the weekly Sonnet usage</label>
+            <default>false</default>
+        </entry>
+        <entry name="providerClaude" type="String">
+            <label>Claude provider: auto (show if signed in), on or off</label>
+            <default>auto</default>
+        </entry>
+        <entry name="providerCodex" type="String">
+            <label>Codex provider: auto (show if signed in), on or off</label>
+            <default>auto</default>
+        </entry>
+        <entry name="providerCopilot" type="String">
+            <label>GitHub Copilot provider: auto (show if signed in), on or off</label>
+            <default>auto</default>
+        </entry>
+        <entry name="providerGemini" type="String">
+            <label>Gemini provider: auto (show if signed in), on or off</label>
+            <default>auto</default>
+        </entry>
+        <entry name="compactProvider" type="String">
+            <label>Which provider gauges the panel shows: all weekly, first, hottest or a provider id</label>
+            <default>all-weekly</default>
+        </entry>
+        <entry name="compactUseProviderIcons" type="Bool">
+            <label>Show provider icons instead of percentages inside panel rings</label>
+            <default>true</default>
+        </entry>
+        <entry name="timeFormat24h" type="Bool">
+            <label>Use 24-hour time for reset labels</label>
+            <default>true</default>
+        </entry>
+        <entry name="tokenSource" type="String">
+            <label>"auto" reads ~/.claude/.credentials.json, or a path to a token file</label>
+            <default>auto</default>
+        </entry>
+        <entry name="notifyResetEarly" type="Bool">
+            <label>Pop a desktop notification when a weekly/monthly limit resets earlier than scheduled</label>
+            <default>false</default>
+        </entry>
+        <entry name="showActivity" type="Bool">
+            <label>Show a colored dot for live Claude/Codex sessions</label>
+            <default>false</default>
+        </entry>
+        <entry name="sessionCommand" type="String">
+            <label>Command to open an assistant session's folder (%d = the cwd)</label>
+            <default>konsole --workdir %d</default>
+        </entry>
+        <entry name="notifyThresholds" type="Bool">
+            <label>Notify when a gauge crosses a usage milestone</label>
+            <default>false</default>
+        </entry>
+        <entry name="thresholdLevels" type="String">
+            <label>Comma-separated usage milestones to alert on, e.g. 80,95</label>
+            <default>80,95</default>
+        </entry>
+        <entry name="notifySignIn" type="Bool">
+            <label>Notify when a provider's sign-in expires</label>
+            <default>false</default>
+        </entry>
+        <entry name="notifyNeedsYou" type="Bool">
+            <label>Notify when a Claude session needs you (permission / question)</label>
+            <default>false</default>
+        </entry>
+        <entry name="quietHoursEnabled" type="Bool">
+            <label>Suppress widget notifications during a daily quiet window</label>
+            <default>false</default>
+        </entry>
+        <entry name="quietStart" type="String">
+            <label>Quiet hours start (HH:mm)</label>
+            <default>23:00</default>
+        </entry>
+        <entry name="quietEnd" type="String">
+            <label>Quiet hours end (HH:mm)</label>
+            <default>07:00</default>
+        </entry>
+        <entry name="showPaseoAgents" type="Bool">
+            <label>Connect to configured Paseo sources and show normalized agents</label>
+            <default>true</default>
+        </entry>
+        <entry name="paseoSources" type="String">
+            <label>JSON array of read-only Paseo WebSocket sources</label>
+            <default>[{"id":"local","name":"Local Paseo","endpoint":"ws://127.0.0.1:6767/ws","enabled":true}]</default>
+        </entry>
+        <entry name="agentRetentionHours" type="Int">
+            <label>How long completed sessions remain in the popup</label>
+            <default>24</default>
+            <min>1</min>
+            <max>168</max>
+        </entry>
+        <entry name="usageRange" type="String">
+            <label>Repository usage summary range: today, week, or month</label>
+            <default>today</default>
+        </entry>
+        <entry name="notifyAgentInput" type="Bool">
+            <label>Notify when a Paseo agent explicitly waits for input</label>
+            <default>true</default>
+        </entry>
+        <entry name="notifyAgentPermission" type="Bool">
+            <label>Notify when a Paseo agent requests permission</label>
+            <default>true</default>
+        </entry>
+        <entry name="notifyAgentFailed" type="Bool">
+            <label>Notify when a Paseo agent fails</label>
+            <default>true</default>
+        </entry>
+        <entry name="notifyAgentCompleted" type="Bool">
+            <label>Notify when a Paseo agent completes</label>
+            <default>true</default>
+        </entry>
+        <entry name="persistMessagePreviews" type="Bool">
+            <label>Persist sanitized attention previews in the local database</label>
+            <default>false</default>
+        </entry>
+    </group>
+</kcfg>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="beacon" x1="11" y1="8" x2="54" y2="57" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5EEAD4"/>
+      <stop offset="0.52" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <filter id="glow" x="-45%" y="-45%" width="190%" height="190%">
+      <feGaussianBlur stdDeviation="1.8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="22" stroke="#9AA7C7" stroke-opacity="0.22" stroke-width="5"/>
+  <path d="M32 10A22 22 0 1 1 12.5 42.2" stroke="url(#beacon)" stroke-width="5" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M22 34C24.5 28.6 28 26 32 26C36 26 39.5 28.6 42 34" stroke="url(#beacon)" stroke-width="3" stroke-linecap="round"/>
+  <path d="M18 28C21.5 20.8 26.2 18 32 18C37.8 18 42.5 20.8 46 28" stroke="url(#beacon)" stroke-width="2.6" stroke-linecap="round" opacity="0.72"/>
+  <circle cx="32" cy="38" r="5" fill="url(#beacon)" filter="url(#glow)"/>
+  <circle cx="32" cy="38" r="1.7" fill="#F8FAFC"/>
+</svg>

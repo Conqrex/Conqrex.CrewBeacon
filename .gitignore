@@ -1,0 +1,79 @@
+# CrewBeacon local agent/tool state
+/.claude/
+/.codex/
+/.agents/
+
+# Private configuration and Paseo pairing offers
+.env
+.env.*
+!.env.example
+!.env.sample
+*.offer
+*.paseo-offer
+
+# Python bytecode, environments, tests, and coverage
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# JavaScript tooling (tests use Node directly; dependencies stay local)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Qt, QML, CMake, and Qt Creator output
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+.qmlcache/
+*.qmlc
+*.jsc
+*.user
+*.user.*
+
+# Plasma packages and release artifacts
+dist/
+repo/
+*.plasmoid
+*.pkg.tar.zst
+packaging/aur/*.tar.gz
+packaging/aur/src/
+packaging/aur/pkg/
+
+# Local CrewBeacon runtime data and provider caches
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+crewbeacon-usage-*.json
+crewbeacon-usage-*.lock
+crewbeacon-usage-*.fail
+crewbeacon-claude-activity/
+
+# Logs, temporary files, and editor/desktop metadata
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej
+*~
+.cache/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

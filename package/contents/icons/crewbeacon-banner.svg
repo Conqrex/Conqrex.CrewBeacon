@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="960" height="320" viewBox="0 0 960 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="40" y1="20" x2="930" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08111F"/><stop offset="0.55" stop-color="#0B1B31"/><stop offset="1" stop-color="#151438"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="85" y1="55" x2="275" y2="260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EEAD4"/><stop offset="0.52" stop-color="#38BDF8"/><stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="2" y="2" width="956" height="316" rx="30" fill="url(#bg)" stroke="#243B5A" stroke-width="4"/>
+  <circle cx="178" cy="160" r="94" stroke="#9AA7C7" stroke-opacity="0.13" stroke-width="18"/>
+  <path d="M178 66A94 94 0 1 1 93.5 201" stroke="url(#signal)" stroke-width="18" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M135 166C146 143 160 132 178 132C196 132 210 143 221 166" stroke="url(#signal)" stroke-width="12" stroke-linecap="round"/>
+  <path d="M116 139C130 109 150 97 178 97C206 97 226 109 240 139" stroke="url(#signal)" stroke-width="8" stroke-linecap="round" opacity="0.64"/>
+  <circle cx="178" cy="190" r="21" fill="url(#signal)" filter="url(#glow)"/>
+  <circle cx="178" cy="190" r="7" fill="#F8FAFC"/>
+  <text x="325" y="137" fill="#F8FAFC" font-family="Inter,Segoe UI,sans-serif" font-size="67" font-weight="760" letter-spacing="-2">CrewBeacon</text>
+  <text x="329" y="184" fill="#93C5FD" font-family="Inter,Segoe UI,sans-serif" font-size="25" font-weight="600">YOUR AI CREW. ONE PLASMA BEACON.</text>
+  <text x="329" y="226" fill="#A8B5CA" font-family="Inter,Segoe UI,sans-serif" font-size="20">Quota · live agents · attention · repository usage · hosts</text>
+  <circle cx="337" cy="266" r="6" fill="#5EEAD4"/><text x="353" y="273" fill="#CBD5E1" font-family="Inter,Segoe UI,sans-serif" font-size="17">local</text>
+  <circle cx="425" cy="266" r="6" fill="#38BDF8"/><text x="441" y="273" fill="#CBD5E1" font-family="Inter,Segoe UI,sans-serif" font-size="17">server-01</text>
+  <circle cx="553" cy="266" r="6" fill="#A78BFA"/><text x="569" y="273" fill="#CBD5E1" font-family="Inter,Segoe UI,sans-serif" font-size="17">multi-host</text>
+</svg>
