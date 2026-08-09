@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sqlite3
 import tempfile
@@ -61,8 +62,122 @@ class StoreTests(unittest.TestCase):
         with store.connect() as db:
             self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], store.SCHEMA_VERSION)
             snapshot = store.stored_snapshot(db)
-        self.assertEqual(snapshot["schemaVersion"], 1)
+        self.assertEqual(snapshot["schemaVersion"], store.SCHEMA_VERSION)
         self.assertEqual(snapshot["sessions"], [])
+
+    def test_incremental_local_usage_import_is_deduplicated(self):
+        codex_root = Path(self.temp.name) / "codex"
+        claude_root = Path(self.temp.name) / "claude"
+        codex_root.mkdir()
+        claude_root.mkdir()
+        codex_log = codex_root / "rollout-fixture.jsonl"
+        claude_log = claude_root / "session-fixture.jsonl"
+
+        def line(kind, timestamp, payload):
+            return {"type": kind, "timestamp": timestamp, "payload": payload}
+
+        first_total = {
+            "input_tokens": 100, "cached_input_tokens": 40,
+            "cache_write_input_tokens": 0, "output_tokens": 20,
+            "reasoning_output_tokens": 2, "total_tokens": 120,
+        }
+        second_total = {
+            "input_tokens": 250, "cached_input_tokens": 120,
+            "cache_write_input_tokens": 10, "output_tokens": 50,
+            "reasoning_output_tokens": 5, "total_tokens": 300,
+        }
+        codex_rows = [
+            line("session_meta", "2026-08-09T10:00:00Z", {
+                "id": "codex-session", "cwd": self.temp.name,
+                "source": "vscode", "originator": "codex_vscode",
+            }),
+            line("turn_context", "2026-08-09T10:00:01Z", {
+                "model": "gpt-fixture", "cwd": self.temp.name,
+            }),
+            line("event_msg", "2026-08-09T10:01:00Z", {
+                "type": "token_count", "info": {
+                    "total_token_usage": first_total,
+                    "last_token_usage": first_total,
+                },
+            }),
+            line("event_msg", "2026-08-09T10:01:01Z", {
+                "type": "token_count", "info": {
+                    "total_token_usage": first_total,
+                    "last_token_usage": first_total,
+                },
+            }),
+            line("event_msg", "2026-08-09T10:02:00Z", {
+                "type": "token_count", "info": {
+                    "total_token_usage": second_total,
+                    "last_token_usage": {
+                        "input_tokens": 150, "cached_input_tokens": 80,
+                        "cache_write_input_tokens": 10, "output_tokens": 30,
+                        "reasoning_output_tokens": 3, "total_tokens": 180,
+                    },
+                },
+            }),
+        ]
+        codex_log.write_text("".join(json.dumps(row) + "\n" for row in codex_rows))
+
+        claude_base = {
+            "type": "assistant", "sessionId": "claude-session",
+            "cwd": self.temp.name, "gitBranch": "fixture",
+            "timestamp": "2026-08-09T10:03:00Z", "requestId": "request-a",
+            "message": {"id": "message-a", "model": "claude-fixture", "usage": {
+                "input_tokens": 30, "output_tokens": 12,
+                "cache_read_input_tokens": 15, "cache_creation_input_tokens": 5,
+            }},
+        }
+        claude_duplicate = dict(claude_base, uuid="duplicate-row")
+        claude_second = dict(claude_base)
+        claude_second.update({
+            "timestamp": "2026-08-09T10:04:00Z", "requestId": "request-b",
+            "message": {"id": "message-b", "model": "claude-fixture", "usage": {
+                "input_tokens": 20, "output_tokens": 8,
+                "cache_read_input_tokens": 10, "cache_creation_input_tokens": 0,
+            }},
+        })
+        claude_log.write_text(
+            json.dumps(claude_base) + "\n" + json.dumps(claude_duplicate) + "\n"
+            + json.dumps(claude_second) + "\n"
+        )
+        payload = {
+            "codexRoot": str(codex_root), "claudeRoot": str(claude_root),
+            "historyDays": 7, "maxBytes": 1024 * 1024,
+        }
+        with store.connect() as db:
+            first = store.import_local_usage(db, payload)
+            second = store.import_local_usage(db, payload)
+            rows = db.execute(
+                "SELECT provider_id, SUM(input_tokens), SUM(output_tokens), "
+                "SUM(cache_read_tokens), COUNT(*) FROM usage_events GROUP BY provider_id"
+            ).fetchall()
+
+            third_total = {
+                "input_tokens": 300, "cached_input_tokens": 140,
+                "cache_write_input_tokens": 10, "output_tokens": 70,
+                "reasoning_output_tokens": 7, "total_tokens": 370,
+            }
+            with codex_log.open("a") as handle:
+                handle.write(json.dumps(line("event_msg", "2026-08-09T10:05:00Z", {
+                    "type": "token_count", "info": {
+                        "total_token_usage": third_total,
+                        "last_token_usage": {
+                            "input_tokens": 50, "cached_input_tokens": 20,
+                            "cache_write_input_tokens": 0, "output_tokens": 20,
+                            "reasoning_output_tokens": 2, "total_tokens": 70,
+                        },
+                    },
+                })) + "\n")
+            third = store.import_local_usage(db, payload)
+
+        by_provider = {row[0]: row for row in rows}
+        self.assertEqual(first["inserted"], 4)
+        self.assertEqual(first["duplicates"], 1)
+        self.assertEqual(second["inserted"], 0)
+        self.assertEqual(by_provider["codex"][1:], (250, 50, 120, 2))
+        self.assertEqual(by_provider["claude"][1:], (50, 20, 25, 2))
+        self.assertEqual(third["inserted"], 1)
 
     def test_usage_dedup_and_context_exclusion(self):
         with store.connect() as db:

@@ -515,7 +515,7 @@ emit_codex_activity() {
 
     find "$dir" -type f -name '*.jsonl' -mmin -480 -printf '%T@ %p\n' 2>/dev/null \
         | sort -nr | head -50 | while IFS= read -r line; do
-            local f last last_type last_payload last_phase last_ts last_epoch age meta sid cwd name state tool turn_ts turn_epoch turn_sec stale
+            local f last last_type last_payload last_phase last_ts last_epoch age meta sid cwd name model surface state tool turn_ts turn_epoch turn_sec stale
             f="${line#* }"
             [ -r "$f" ] || continue
 
@@ -537,11 +537,16 @@ emit_codex_activity() {
             meta="$(head -n 20 "$f" 2>/dev/null | jq -sc '
                 map(select(.type == "session_meta" or .type == "turn_context"))
                 | { sid:(([.[].payload.session_id, .[].payload.id] | map(select(. != null and . != "")) | first) // ""),
-                    cwd:([.[].payload.cwd] | map(select(. != null and . != "")) | first // "") }
+                    cwd:([.[].payload.cwd] | map(select(. != null and . != "")) | first // ""),
+                    model:([.[].payload.model] | map(select(. != null and . != "")) | last // ""),
+                    surface:(([.[].payload.source, .[].payload.originator]
+                              | map(select(. != null and . != "")) | first) // "") }
             ' 2>/dev/null)"
             sid="$(printf '%s\n' "$meta" | jq -r '.sid // empty' 2>/dev/null)"
             [ -n "$sid" ] || sid="$(codex_session_id_from_path "$f")"
             cwd="$(printf '%s\n' "$meta" | jq -r '.cwd // empty' 2>/dev/null)"
+            model="$(printf '%s\n' "$meta" | jq -r '.model // empty' 2>/dev/null)"
+            surface="$(printf '%s\n' "$meta" | jq -r '.surface // empty' 2>/dev/null)"
             name=""
             [ -n "$cwd" ] && name="$(basename "$cwd")"
 
@@ -575,10 +580,12 @@ emit_codex_activity() {
             fi
 
             jq -cn --arg session "$sid" --arg cwd "$cwd" --arg name "$name" \
+                   --arg model "$model" --arg surface "$surface" \
                    --arg state "$state" --arg tool "$tool" \
                    --argjson age "$age" --argjson stale "$stale" --argjson turnSec "$turn_sec" \
                 '{provider:"codex", session:$session, cwd:$cwd, name:$name,
-                  state:$state, ageSec:$age, stale:$stale, tool:$tool, turnSec:$turnSec}'
+                  model:$model, surface:$surface, state:$state, ageSec:$age,
+                  stale:$stale, tool:$tool, turnSec:$turnSec}'
         done
 }
 

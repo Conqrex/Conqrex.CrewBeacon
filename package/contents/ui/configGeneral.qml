@@ -26,6 +26,9 @@ KCM.SimpleKCM {
     property alias cfg_quietStart: quietStartField.text
     property alias cfg_quietEnd: quietEndField.text
     property alias cfg_showActivity: activityBox.checked
+    property alias cfg_showLocalSessions: localSessionsBox.checked
+    property alias cfg_recordLocalUsage: localUsageBox.checked
+    property alias cfg_localUsageHistoryDays: localHistorySpin.value
     property alias cfg_sessionCommand: sessionCommandField.text
     property alias cfg_tokenSource: tokenField.text
     property alias cfg_showPaseoAgents: paseoAgentsBox.checked
@@ -190,6 +193,23 @@ KCM.SimpleKCM {
             text: i18n("Monitor configured Paseo sources")
         }
 
+        QQC2.CheckBox {
+            id: localSessionsBox
+            text: i18n("Show local Claude/Codex editor and CLI sessions")
+        }
+
+        QQC2.CheckBox {
+            id: localUsageBox
+            text: i18n("Record local Claude/Codex usage history")
+        }
+
+        QQC2.SpinBox {
+            id: localHistorySpin
+            from: 1; to: 30
+            enabled: localUsageBox.checked
+            Kirigami.FormData.label: i18n("Scan updated logs (days):")
+        }
+
         QQC2.SpinBox {
             id: agentRetentionSpin
             from: 1; to: 168
@@ -215,7 +235,7 @@ KCM.SimpleKCM {
             wrapMode: Text.WordWrap
             opacity: 0.7
             font: Kirigami.Theme.smallFont
-            text: i18n("Agent sources are read-only. Token history includes only provider-reported Paseo turn events observed by CrewBeacon; context-window occupancy is never counted as consumed tokens.")
+            text: i18n("Paseo sources are read-only. Local history reads only provider-reported usage counters and session metadata from Claude/Codex JSONL logs; prompts and responses are never stored. Imports are incremental and bounded. Context-window occupancy is never counted as consumed tokens.")
         }
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Agent alerts") }
@@ -402,18 +422,18 @@ KCM.SimpleKCM {
             }
         }
 
-        Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Legacy local sessions") }
+        Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Local activity") }
 
         QQC2.CheckBox {
             id: activityBox
-            text: i18n("Show live sessions")
+            text: i18n("Show local activity on the panel icon")
         }
         QQC2.Label {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 20
             wrapMode: Text.WordWrap
             opacity: 0.7
             font: Kirigami.Theme.smallFont
-            text: i18n("Adds a colored dot to the panel and session rows in the popup. Claude uses hooks for working, idle, and needs-you states; Codex is inferred from recent local session logs.")
+            text: i18n("The Agents list can show local sessions independently. This option also adds their aggregate working, idle, or needs-you state to the panel icon. Claude uses hooks for live state; Codex is inferred from recent local session logs.")
         }
 
         RowLayout {

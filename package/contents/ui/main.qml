@@ -27,11 +27,16 @@ PlasmoidItem {
     property var pendingSnapshots: ({})
     property var storedSnapshot: ({ sessions: [], hosts: [], usage: { ranges: {} } })
     property var usageDayDetail: ({ ok: true, date: "", repositories: [], providers: [], sessions: [], events: [] })
+    property bool localImportRunning: false
     readonly property var configuredPaseoSources: parsePaseoSources(
         Plasmoid.configuration.showPaseoAgents,
         Plasmoid.configuration.paseoSources)
-    readonly property var agentSessions: buildAgentSessions(sourceSnapshots,
-                                                             storedSnapshot.sessions || [])
+    readonly property var paseoAgentSessions: buildAgentSessions(sourceSnapshots,
+                                                                  storedSnapshot.sessions || [])
+    readonly property var localEditorSessions: buildLocalAgentSessions(
+        assistantActivity && assistantActivity.sessions ? assistantActivity.sessions : [],
+        paseoAgentSessions, Plasmoid.configuration.showLocalSessions)
+    readonly property var agentSessions: Paseo.sortSessions(paseoAgentSessions.concat(localEditorSessions))
     readonly property var attentionSessions: buildAttentionSessions(agentSessions)
     readonly property var paseoHosts: buildHosts(sourceSnapshots, storedSnapshot.hosts || [])
     readonly property var repositoryUsage: usageForRange(storedSnapshot.usage,
@@ -82,6 +87,62 @@ PlasmoidItem {
         return Paseo.sortSessions(out)
     }
 
+    function normalizedDirectory(value) {
+        return (value || "").replace(/\/+$/, "")
+    }
+
+    function buildLocalAgentSessions(activity, paseoSessions, enabled) {
+        if (!enabled || !Array.isArray(activity)) return []
+        var activePaseo = {}
+        for (var p = 0; p < paseoSessions.length; p++) {
+            var paseo = paseoSessions[p] || {}
+            if (!paseo.workingDirectory || !paseo.providerId) continue
+            activePaseo[(paseo.providerId + ":" + normalizedDirectory(paseo.workingDirectory)).toLowerCase()] = true
+        }
+        var out = []
+        for (var i = 0; i < activity.length; i++) {
+            var item = activity[i] || {}
+            var provider = (item.provider || "agent").toLowerCase()
+            var cwd = normalizedDirectory(item.cwd)
+            if (cwd && activePaseo[(provider + ":" + cwd).toLowerCase()]) continue
+            var state = item.state === "attention" ? "WaitingForInput"
+                      : item.state === "working" ? "Working" : "Idle"
+            var age = Math.max(0, Number(item.ageSec) || 0)
+            var turn = Math.max(0, Number(item.turnSec) || 0)
+            var lastActivity = new Date(Date.now() - age * 1000).toISOString()
+            var started = turn > 0 ? new Date(Date.now() - turn * 1000).toISOString() : ""
+            var surface = (item.surface || "").toLowerCase()
+            var sourceLabel = surface.indexOf("vscode") !== -1 ? i18n("VS Code")
+                            : surface.indexOf("desktop") !== -1 ? i18n("Desktop")
+                            : i18n("Local editor / CLI")
+            out.push({
+                key: "local-activity:" + provider + ":" + (item.session || i),
+                id: item.session || (provider + "-" + i),
+                sourceId: "local-activity",
+                sourceName: sourceLabel,
+                hostId: "local",
+                hostName: sourceLabel,
+                providerId: provider,
+                providerLabel: provider === "claude" ? "Claude" : provider === "codex" ? "Codex" : provider,
+                modelId: item.model || "",
+                title: item.name || i18n("Local session"),
+                repositoryName: item.name || i18n("Local session"),
+                workingDirectory: cwd,
+                state: state,
+                rawState: item.state || "idle",
+                startedAt: started,
+                lastActivityAt: lastActivity,
+                endedAt: "",
+                attentionReason: state === "WaitingForInput" ? i18n("Needs you") : "",
+                deepLink: "",
+                localActivity: true,
+                stale: !!item.stale,
+                sourceConnectionState: "Connected"
+            })
+        }
+        return out
+    }
+
     function buildAttentionSessions(sessions) {
         var out = []
         for (var i = 0; i < sessions.length; i++)
@@ -121,11 +182,11 @@ PlasmoidItem {
     // { state: "working"|"idle"|"attention"|"none", sessions: [{provider, ...}] }
     property var assistantActivity: ({ state: "none", sessions: [] })
     readonly property string paseoActivityState: {
-        if (!Plasmoid.configuration.showPaseoAgents || agentSessions.length === 0) return "none"
-        for (var i = 0; i < agentSessions.length; i++)
-            if (Paseo.isAttentionState(agentSessions[i].state)) return "attention"
-        for (var j = 0; j < agentSessions.length; j++)
-            if (agentSessions[j].state === "Working" || agentSessions[j].state === "Connecting") return "working"
+        if (!Plasmoid.configuration.showPaseoAgents || paseoAgentSessions.length === 0) return "none"
+        for (var i = 0; i < paseoAgentSessions.length; i++)
+            if (Paseo.isAttentionState(paseoAgentSessions[i].state)) return "attention"
+        for (var j = 0; j < paseoAgentSessions.length; j++)
+            if (paseoAgentSessions[j].state === "Working" || paseoAgentSessions[j].state === "Connecting") return "working"
         return "idle"
     }
     readonly property string activityState: paseoActivityState !== "none" ? paseoActivityState
@@ -201,6 +262,24 @@ PlasmoidItem {
                 hosts: storedSnapshot.hosts || [],
                 usage: result.usage
             }
+        })
+    }
+
+    function importLocalUsage() {
+        if (!Plasmoid.configuration.recordLocalUsage || localImportRunning) return
+        localImportRunning = true
+        storeCall("import-local-usage", {
+            historyDays: Plasmoid.configuration.localUsageHistoryDays
+        }, function(result) {
+            root.localImportRunning = false
+            if (!result || result.ok === false || !result.usage) return
+            root.storedSnapshot = {
+                sessions: root.storedSnapshot.sessions || [],
+                hosts: root.storedSnapshot.hosts || [],
+                usage: result.usage
+            }
+            if (root.usageDayDetail && root.usageDayDetail.date)
+                root.loadUsageDay(root.usageDayDetail.date)
         })
     }
 
@@ -731,6 +810,7 @@ PlasmoidItem {
 
     Component.onCompleted: storeCall("snapshot", null, function(result) {
         root.applyStoredSnapshot(result)
+        root.importLocalUsage()
     })
 
     Plasma5Support.DataSource {
@@ -758,7 +838,10 @@ PlasmoidItem {
     function refreshAll() {
         root.refresh()
         root.refreshPaseoSources()
-        root.storeCall("snapshot", null, function(result) { root.applyStoredSnapshot(result) })
+        root.storeCall("snapshot", null, function(result) {
+            root.applyStoredSnapshot(result)
+            root.importLocalUsage()
+        })
     }
 
     // poll: re-detect (cheap, filesystem-only) then fetch the enabled providers.
@@ -771,6 +854,13 @@ PlasmoidItem {
         onTriggered: root.refresh()
     }
 
+    Timer {
+        interval: Math.max(120, Plasmoid.configuration.refreshInterval) * 1000
+        running: Plasmoid.configuration.recordLocalUsage
+        repeat: true
+        onTriggered: root.importLocalUsage()
+    }
+
     // keep reset countdowns live without re-fetching
     Timer {
         interval: 30000
@@ -781,7 +871,7 @@ PlasmoidItem {
 
     // --- activity poll ------------------------------------------------------
     // A lightweight read of Claude hook state and recent Codex session logs.
-    // Only runs while the indicator/alert is enabled, so it costs nothing when off.
+    // Runs while local rows, the panel indicator, or local alerts are enabled.
     Plasma5Support.DataSource {
         id: activityExec
         engine: "executable"
@@ -798,11 +888,12 @@ PlasmoidItem {
         }
         function run(cmd) { if (cmd) connectSource(cmd); }
     }
-    // Poll while the dot is shown OR the "needs you" alert is on (the alert works
-    // even when the panel dot is hidden).
+    // Local session rows and alerts work even when the panel dot is hidden.
     Timer {
         interval: 3000
-        running: Plasmoid.configuration.showActivity || Plasmoid.configuration.notifyNeedsYou
+        running: Plasmoid.configuration.showLocalSessions
+              || Plasmoid.configuration.showActivity
+              || Plasmoid.configuration.notifyNeedsYou
         repeat: true
         triggeredOnStart: true
         onTriggered: activityExec.run(root.activityCmd)

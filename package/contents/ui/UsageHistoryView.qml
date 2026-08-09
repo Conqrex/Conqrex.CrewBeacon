@@ -483,7 +483,7 @@ Item {
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
-                        text: i18n("History includes only provider-reported turn events observed by CrewBeacon. Relay-only snapshots are not estimated or added as consumed usage.")
+                        text: i18n("History includes provider-reported Paseo events and enabled local Claude/Codex log counters. Relay-only snapshots are never estimated or added as consumed usage.")
                         opacity: 0.55
                         font.pointSize: Kirigami.Theme.smallFont.pointSize
                     }

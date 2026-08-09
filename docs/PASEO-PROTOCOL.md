@@ -207,6 +207,6 @@ Provider support is capability-based. Missing token or cost fields remain null/u
 
 - Relay E2EE supports read-only directory polling through an installed official Paseo CLI; it does not yet stream direct-protocol timeline or usage events.
 - Password-authenticated direct sockets are not configured in plain widget settings. Use an SSH-forwarded loopback endpoint or another secure password-free transport boundary for this slice.
-- The protocol does not expose a historical stream of per-turn usage deltas through the directory snapshot. CrewBeacon history begins with events it observes; provider history adapters are future work for trustworthy backfill.
+- The protocol does not expose a historical stream of per-turn usage deltas through the directory snapshot. CrewBeacon never estimates usage from it. A separate local-only adapter can import deduplicated provider counters from Claude/Codex JSONL logs.
 - The adapter displays the first 200 non-archived agents/workspaces per source. Pagination can be added without changing the normalization boundary.
 - `WaitingForInput` is available only for explicit `question` permission requests in `0.2.5`; no state is inferred from inactivity.

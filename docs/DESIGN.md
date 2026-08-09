@@ -22,7 +22,7 @@ and agent state.
 | Source topology | Independent source objects merged at the root; direct and relay failures remain isolated |
 | Remote control | Out of scope; only list/subscription/timeline-subscription requests are sent |
 | Persistence | Small on-demand Python standard-library SQLite helper; no resident companion daemon |
-| Usage policy | Persist only observed `turn_completed` provider-reported deltas; store context separately and exclude it from totals |
+| Usage policy | Persist observed Paseo `turn_completed` deltas plus deduplicated local Claude/Codex provider counters; store context separately and exclude it from totals |
 | Repository identity | Canonical remote first; Paseo project key second; host + root path fallback |
 | Secrets | No endpoint passwords or offer URLs in KConfig; relay offers are user-owned `0600` files |
 | Notifications | Explicit protocol evidence only, SQLite primary-key dedup across reconnects/restarts |
@@ -33,7 +33,7 @@ and agent state.
 ┌──────────────────────── KDE Plasma / QML ────────────────────────┐
 │ main.qml                                                         │
 │  ├─ quota acquisition + normalized QuotaSnapshot                │
-│  ├─ source/session/host aggregation                             │
+│  ├─ Paseo + local editor session/host aggregation               │
 │  ├─ notification gate                                            │
 │  └─ CompactView / FullView                                       │
 │      ├─ OverviewView: attention + agents + quota + sources       │
@@ -51,6 +51,7 @@ and agent state.
 │ crewbeacon_store.py                                              │
 │  ├─ schema migration                                             │
 │  ├─ host/session last-known snapshots                            │
+│  ├─ incremental Claude/Codex JSONL usage import                  │
 │  ├─ usage event dedup + local time rollups                       │
 │  └─ attention dedup                                              │
 └───────────────────────────┬──────────────────────────────────────┘
@@ -117,6 +118,7 @@ restart duplicates.
 - Direct public daemon exposure is never recommended.
 - The implementation sends no agent prompts, approvals, stops, or mutations.
 - Raw provider credentials remain in the stores owned by their official tools.
+- The local importer reads only session metadata and provider usage counters; prompt and response bodies are not persisted.
 - Attention previews are truncated at the protocol adapter and not persisted by default.
 - Logs and database rows contain no auth secret.
 - Relay E2EE is delegated to the official Paseo CLI. Its offer trust anchor is read only from a current-user `0600` file and passed through `PASEO_HOST`.
@@ -129,7 +131,8 @@ and avoids another lifecycle to package. If event frequency, background
 backfill, or database concurrency grows materially, it can become a user
 service behind the same JSON command boundary without changing the QML domain.
 
-Paseo's directory snapshot does not provide historical per-turn deltas. The
-store preserves all observed history but cannot safely invent or reconstruct
-events missed while CrewBeacon was offline. Provider-specific backfill requires
-versioned fixtures and is a later adapter.
+Paseo's directory snapshot does not provide historical per-turn deltas, so the
+store cannot reconstruct usage from relay snapshots. Local Claude/Codex JSONL
+logs provide a separate incremental backfill with versioned tests. Import work
+is byte-bounded and resumes from durable per-file cursors to avoid repeatedly
+scanning large histories.

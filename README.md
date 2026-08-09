@@ -30,9 +30,9 @@
 | | |
 |---|---|
 | 🚨 **Attention first** | Explicit input, permission, and failure states appear above routine telemetry. Notifications are durably deduplicated across reconnects and Plasma restarts. |
-| 🤖 **Compact crew overview** | Filterable two-line Paseo agent cards keep active, attention, and completed work scannable without repeating repository metadata. |
+| 🤖 **Compact crew overview** | Filterable two-line cards merge Paseo agents with active local Claude/Codex editor and CLI sessions. VS Code sessions are labeled explicitly and open their workspace on click. |
 | 🌐 **Server-first** | Observe local Paseo, a dedicated development server, and additional hosts through independent direct or official relay sources. One source failing does not blank the others. |
-| 📅 **Daily usage history** | A 371-day calendar heatmap opens each local day into repository, provider/model, session, and individual-turn detail. |
+| 📅 **Daily usage history** | A 371-day calendar heatmap opens each local day into repository, provider/model, session, and individual-call detail. Recent local Claude/Codex usage is imported incrementally. |
 | ⏱️ **Provider quota** | Claude, Codex, Copilot, and Gemini detection; usage windows; reset times; plan details; stale-data fallback; ring/bar modes; and quota alerts built into CrewBeacon. |
 | 🎛️ **Weekly panel rings** | Show every visible provider with a primary weekly limit side by side in the panel; Claude and Codex marks can replace center percentages. |
 | 🎨 **Shared visual language** | The bounded popup, navy palette, compact cards, chips, spacing, and optional system-theme mode follow OctoPulse. |
@@ -72,6 +72,19 @@ Local Paseo · ws://127.0.0.1:6767/ws
 Paseo must be running. CrewBeacon performs the protocol handshake, verifies a
 `0.2.x` daemon, subscribes to session/workspace updates, and never sends agent
 control requests.
+
+### Local editors and CLIs
+
+Local Claude and Codex sessions are enabled independently of Paseo under
+**CrewBeacon settings → General → CrewBeacon agents**. Codex activity is read
+from recent rollout metadata, including VS Code sessions. Claude live state uses
+the optional hooks available on the same settings page.
+
+CrewBeacon can also import provider-reported token counters from recent
+`~/.codex/sessions` and `~/.claude/projects` JSONL files. The importer is
+incremental, byte-bounded, and deduplicated. It reads session/repository/model
+metadata and usage counters only; prompt and response bodies are never inserted
+into CrewBeacon's database. The backfill window is configurable from 1–30 days.
 
 ### Dedicated server through the Paseo relay
 
@@ -133,6 +146,8 @@ consumption.
 | Data | Treatment |
 |---|---|
 | Paseo `turn_completed` input/output tokens | Persisted as provider-reported event deltas and included in history |
+| Codex local cumulative counters | Only positive counter advances are persisted; repeated snapshots are ignored |
+| Claude local request usage | Deduplicated by provider request ID before persistence |
 | Cache-read tokens | Stored and displayed independently; not added again to input+output totals |
 | Paseo reported cost | Stored with USD provenance when present; never price-estimated silently |
 | Context used / maximum | Current context detail only; excluded from historical totals |
@@ -140,10 +155,10 @@ consumption.
 | Missing provider fields | Hidden or shown as unavailable, never replaced with zero |
 | Quota windows | Displayed only under Quota; never interpreted as token usage |
 
-The durable event history begins when CrewBeacon observes an event. Paseo
-`0.2.5` does not expose a historical stream of missed per-turn usage deltas via
-the directory snapshot, so offline gaps are not fabricated. See the exact
-[protocol evidence](docs/PASEO-PROTOCOL.md).
+Paseo `0.2.5` does not expose a historical stream of missed per-turn usage
+deltas via the directory snapshot, so relay snapshots are never converted into
+usage. Local Claude/Codex logs provide a separate, bounded backfill path when
+enabled. See the exact [protocol evidence](docs/PASEO-PROTOCOL.md).
 
 ## 🖥️ Requirements
 
@@ -179,7 +194,8 @@ The project has no compile step. Run the complete local suite:
 It covers quota normalization/formatting, Paseo message/state normalization,
 unknown-message tolerance, reconnect bounds, attention and usage deduplication,
 remote normalization/worktree grouping, context-vs-cumulative safety, local
-day/week/month rollups, partial metrics, persistence, and QML/static validation.
+log import cursors, day/week/month rollups, partial metrics, persistence, and
+QML/static validation.
 
 Preview without restarting Plasma:
 

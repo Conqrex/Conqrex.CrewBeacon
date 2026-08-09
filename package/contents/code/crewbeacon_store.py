@@ -4,17 +4,31 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
+import socket
 import sqlite3
+import subprocess
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+LOCAL_IMPORT_DEFAULT_DAYS = 7
+LOCAL_IMPORT_MAX_BYTES = 128 * 1024 * 1024
+TOKEN_COUNTER_FIELDS = (
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_write_input_tokens",
+    "output_tokens",
+    "reasoning_output_tokens",
+    "total_tokens",
+)
 
 
 def database_path() -> Path:
@@ -152,6 +166,30 @@ def migrate(db: sqlite3.Connection) -> None:
             );
 
             PRAGMA user_version = 1;
+            """
+        )
+        db.commit()
+    if version < 2:
+        db.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS local_import_files (
+                path TEXT PRIMARY KEY,
+                provider_id TEXT NOT NULL,
+                file_device INTEGER NOT NULL,
+                file_inode INTEGER NOT NULL,
+                byte_offset INTEGER NOT NULL DEFAULT 0,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                mtime_ns INTEGER NOT NULL DEFAULT 0,
+                session_id TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                counters_json TEXT NOT NULL DEFAULT '{}',
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS local_import_files_updated_idx
+            ON local_import_files(updated_at DESC);
+
+            PRAGMA user_version = 2;
             """
         )
         db.commit()
@@ -354,7 +392,7 @@ def sync_snapshot(db: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, 
     return {"ok": True, "sourceId": source_id, "sessions": len(sessions)}
 
 
-def record_usage(db: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def insert_usage_event(db: sqlite3.Connection, payload: dict[str, Any]) -> bool:
     dedup_key = text(payload.get("dedupKey"))
     session_id = text(payload.get("sessionId"))
     if not dedup_key or not session_id:
@@ -401,8 +439,372 @@ def record_usage(db: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, A
             stamp,
         ),
     )
+    return cursor.rowcount == 1
+
+
+def record_usage(db: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    inserted = insert_usage_event(db, payload)
     db.commit()
-    return {"ok": True, "inserted": cursor.rowcount == 1, "usage": usage_snapshot(db)}
+    return {"ok": True, "inserted": inserted, "usage": usage_snapshot(db)}
+
+
+def normalize_git_remote(value: str) -> str:
+    remote = value.strip()
+    if not remote:
+        return ""
+    if "://" not in remote and ":" in remote:
+        user_host, path = remote.split(":", 1)
+        host = user_host.rsplit("@", 1)[-1]
+        normalized = f"{host}/{path}"
+    else:
+        parsed = urlparse(remote if "://" in remote else f"ssh://{remote}")
+        normalized = f"{parsed.hostname or ''}{parsed.path}"
+    return normalized.strip("/").removesuffix(".git").lower()
+
+
+def repository_metadata(cwd_value: Any) -> dict[str, str]:
+    cwd = text(cwd_value)
+    if not cwd:
+        return {
+            "workingDirectory": "", "repositoryId": "unattributed",
+            "repositoryName": "Unattributed", "repositoryRemote": "",
+        }
+    path = Path(cwd).expanduser()
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = path
+    root = resolved
+    remote = ""
+    if resolved.is_dir():
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(resolved), "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, timeout=2, check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                root = Path(result.stdout.strip()).resolve()
+                remote_result = subprocess.run(
+                    ["git", "-C", str(root), "config", "--get", "remote.origin.url"],
+                    capture_output=True, text=True, timeout=2, check=False,
+                )
+                if remote_result.returncode == 0:
+                    remote = normalize_git_remote(remote_result.stdout)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    if remote:
+        repository_id = f"remote:{remote}"
+    else:
+        digest = hashlib.sha256(str(root).encode("utf-8", "replace")).hexdigest()[:20]
+        repository_id = f"local:{digest}"
+    return {
+        "workingDirectory": str(resolved),
+        "repositoryId": repository_id,
+        "repositoryName": root.name or resolved.name or "Local workspace",
+        "repositoryRemote": remote,
+    }
+
+
+def refresh_repository_metadata(metadata: dict[str, Any], cwd_value: Any) -> None:
+    cwd = text(cwd_value)
+    if not cwd:
+        return
+    if text(metadata.get("workingDirectory")) == cwd and text(metadata.get("repositoryId")):
+        return
+    metadata.update(repository_metadata(cwd))
+
+
+def safe_event_timestamp(value: Any, fallback: datetime) -> str:
+    try:
+        return iso_utc(parse_timestamp(value, fallback))
+    except (TypeError, ValueError):
+        return iso_utc(fallback)
+
+
+def local_usage_payload(
+    provider_id: str,
+    metadata: dict[str, Any],
+    session_id: str,
+    captured_at: str,
+    identity: str,
+    values: dict[str, int | float | None],
+) -> dict[str, Any]:
+    return {
+        "dedupKey": f"local:{provider_id}:{identity}",
+        "capturedAt": captured_at,
+        "sourceId": f"local-{provider_id}",
+        "hostId": socket.gethostname() or "local",
+        "sessionId": session_id,
+        "repositoryId": text(metadata.get("repositoryId"), "unattributed"),
+        "repositoryName": text(metadata.get("repositoryName"), "Unattributed"),
+        "repositoryRemote": text(metadata.get("repositoryRemote")),
+        "workingDirectory": text(metadata.get("workingDirectory")),
+        "branch": text(metadata.get("branch")),
+        "providerId": provider_id,
+        "modelId": text(metadata.get("modelId")),
+        "inputTokens": values.get("inputTokens"),
+        "outputTokens": values.get("outputTokens"),
+        "cacheReadTokens": values.get("cacheReadTokens"),
+        "cacheWriteTokens": values.get("cacheWriteTokens"),
+        "reasoningTokens": values.get("reasoningTokens"),
+        "reportedCost": values.get("reportedCost"),
+        "currency": text(values.get("currency")),
+        "provenance": f"{provider_id}:local-jsonl",
+        "quality": "provider-reported",
+        "metricKind": "event_delta",
+    }
+
+
+def codex_log_event(
+    row: dict[str, Any],
+    metadata: dict[str, Any],
+    counters: dict[str, int],
+    fallback: datetime,
+) -> dict[str, Any] | None:
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    row_type = text(row.get("type"))
+    if row_type == "session_meta":
+        session_id = text(payload.get("id")) or text(payload.get("session_id"))
+        if session_id:
+            metadata["sessionId"] = session_id
+        metadata["surface"] = text(payload.get("source")) or text(payload.get("originator"))
+        refresh_repository_metadata(metadata, payload.get("cwd"))
+        return None
+    if row_type == "turn_context":
+        if text(payload.get("model")):
+            metadata["modelId"] = text(payload.get("model"))
+        refresh_repository_metadata(metadata, payload.get("cwd"))
+        return None
+    if row_type != "event_msg" or text(payload.get("type")) != "token_count":
+        return None
+    info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
+    raw_total = info.get("total_token_usage") if isinstance(info.get("total_token_usage"), dict) else {}
+    if not raw_total:
+        return None
+    current = {field: int(metric(raw_total.get(field)) or 0) for field in TOKEN_COUNTER_FIELDS}
+    previous = {field: int(counters.get(field, 0)) for field in TOKEN_COUNTER_FIELDS}
+    if counters:
+        delta = {field: current[field] - previous[field] for field in TOKEN_COUNTER_FIELDS}
+    else:
+        delta = current.copy()
+    if any(value < 0 for value in delta.values()):
+        recent = info.get("last_token_usage") if isinstance(info.get("last_token_usage"), dict) else {}
+        delta = {field: int(metric(recent.get(field)) or 0) for field in TOKEN_COUNTER_FIELDS}
+    counters.clear()
+    counters.update(current)
+    if not any(delta[field] > 0 for field in (
+        "input_tokens", "output_tokens", "cached_input_tokens",
+        "cache_write_input_tokens", "reasoning_output_tokens",
+    )):
+        return None
+    session_id = text(metadata.get("sessionId")) or "unknown-codex-session"
+    captured = safe_event_timestamp(row.get("timestamp"), fallback)
+    fingerprint = hashlib.sha256(
+        f"{session_id}\0{captured}\0{current['total_tokens']}\0{current['input_tokens']}".encode()
+    ).hexdigest()[:24]
+    return local_usage_payload("codex", metadata, session_id, captured, fingerprint, {
+        "inputTokens": delta["input_tokens"],
+        "outputTokens": delta["output_tokens"],
+        "cacheReadTokens": delta["cached_input_tokens"],
+        "cacheWriteTokens": delta["cache_write_input_tokens"],
+        "reasoningTokens": delta["reasoning_output_tokens"],
+        "reportedCost": None,
+        "currency": "",
+    })
+
+
+def claude_log_event(
+    row: dict[str, Any], metadata: dict[str, Any], fallback: datetime,
+) -> dict[str, Any] | None:
+    session_id = text(row.get("sessionId"))
+    if session_id:
+        metadata["sessionId"] = session_id
+    if text(row.get("gitBranch")):
+        metadata["branch"] = text(row.get("gitBranch"))
+    refresh_repository_metadata(metadata, row.get("cwd"))
+    if text(row.get("type")) != "assistant":
+        return None
+    message = row.get("message") if isinstance(row.get("message"), dict) else {}
+    usage = message.get("usage") if isinstance(message.get("usage"), dict) else {}
+    if not usage:
+        return None
+    if text(message.get("model")):
+        metadata["modelId"] = text(message.get("model"))
+    values = {
+        "inputTokens": metric(usage.get("input_tokens")),
+        "outputTokens": metric(usage.get("output_tokens")),
+        "cacheReadTokens": metric(usage.get("cache_read_input_tokens")),
+        "cacheWriteTokens": metric(usage.get("cache_creation_input_tokens")),
+        "reasoningTokens": None,
+        "reportedCost": None,
+        "currency": "",
+    }
+    if all(values[key] is None for key in (
+        "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens",
+    )):
+        return None
+    session_id = text(metadata.get("sessionId")) or "unknown-claude-session"
+    captured = safe_event_timestamp(row.get("timestamp"), fallback)
+    request_id = text(row.get("requestId")) or text(message.get("id")) or text(row.get("uuid"))
+    if not request_id:
+        request_id = hashlib.sha256(
+            f"{session_id}\0{captured}\0{json.dumps(values, sort_keys=True)}".encode()
+        ).hexdigest()[:24]
+    identity = hashlib.sha256(f"{session_id}\0{request_id}".encode()).hexdigest()[:24]
+    return local_usage_payload("claude", metadata, session_id, captured, identity, values)
+
+
+def local_log_roots(payload: dict[str, Any]) -> list[tuple[str, Path]]:
+    codex_default = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")) / "sessions"
+    claude_default = Path.home() / ".claude" / "projects"
+    return [
+        ("codex", Path(text(payload.get("codexRoot"), str(codex_default))).expanduser()),
+        ("claude", Path(text(payload.get("claudeRoot"), str(claude_default))).expanduser()),
+    ]
+
+
+def discover_local_logs(payload: dict[str, Any], reference: datetime) -> list[tuple[str, Path, os.stat_result]]:
+    days = max(1, min(371, int(payload.get("historyDays") or LOCAL_IMPORT_DEFAULT_DAYS)))
+    cutoff = reference.timestamp() - days * 86400
+    found: list[tuple[str, Path, os.stat_result]] = []
+    for provider_id, root in local_log_roots(payload):
+        if not root.is_dir():
+            continue
+        try:
+            paths = root.rglob("*.jsonl")
+            for path in paths:
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                if stat.st_mtime >= cutoff and path.is_file():
+                    found.append((provider_id, path.resolve(), stat))
+        except OSError:
+            continue
+    found.sort(key=lambda item: item[2].st_mtime_ns, reverse=True)
+    return found
+
+
+def load_import_cursor(db: sqlite3.Connection, path: Path) -> sqlite3.Row | None:
+    return db.execute("SELECT * FROM local_import_files WHERE path = ?", (str(path),)).fetchone()
+
+
+def save_import_cursor(
+    db: sqlite3.Connection,
+    provider_id: str,
+    path: Path,
+    stat: os.stat_result,
+    offset: int,
+    metadata: dict[str, Any],
+    counters: dict[str, int],
+) -> None:
+    db.execute(
+        """
+        INSERT INTO local_import_files(
+            path, provider_id, file_device, file_inode, byte_offset, file_size,
+            mtime_ns, session_id, metadata_json, counters_json, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(path) DO UPDATE SET
+            provider_id = excluded.provider_id,
+            file_device = excluded.file_device,
+            file_inode = excluded.file_inode,
+            byte_offset = excluded.byte_offset,
+            file_size = excluded.file_size,
+            mtime_ns = excluded.mtime_ns,
+            session_id = excluded.session_id,
+            metadata_json = excluded.metadata_json,
+            counters_json = excluded.counters_json,
+            updated_at = excluded.updated_at
+        """,
+        (
+            str(path), provider_id, stat.st_dev, stat.st_ino, offset, stat.st_size,
+            stat.st_mtime_ns, text(metadata.get("sessionId")) or None,
+            json.dumps(metadata, separators=(",", ":"), ensure_ascii=False),
+            json.dumps(counters, separators=(",", ":")), iso_utc(),
+        ),
+    )
+
+
+def import_local_usage(db: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    reference = now_utc()
+    requested_bytes = int(payload.get("maxBytes") or LOCAL_IMPORT_MAX_BYTES)
+    byte_budget = max(1024, min(512 * 1024 * 1024, requested_bytes))
+    inserted = 0
+    duplicates = 0
+    parsed_lines = 0
+    consumed_bytes = 0
+    files_processed = 0
+    files = discover_local_logs(payload, reference)
+
+    for provider_id, path, stat in files:
+        if consumed_bytes >= byte_budget:
+            break
+        cursor = load_import_cursor(db, path)
+        reset = cursor is None or int(cursor["file_device"]) != stat.st_dev \
+            or int(cursor["file_inode"]) != stat.st_ino or stat.st_size < int(cursor["byte_offset"])
+        offset = 0 if reset else int(cursor["byte_offset"])
+        if offset >= stat.st_size:
+            continue
+        try:
+            metadata = {} if reset else json.loads(cursor["metadata_json"] or "{}")
+            counters = {} if reset else json.loads(cursor["counters_json"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            metadata, counters, offset = {}, {}, 0
+        metadata = metadata if isinstance(metadata, dict) else {}
+        counters = counters if isinstance(counters, dict) else {}
+        fallback = datetime.fromtimestamp(stat.st_mtime, timezone.utc)
+        current_offset = offset
+        try:
+            with path.open("rb") as handle:
+                handle.seek(offset)
+                while consumed_bytes < byte_budget:
+                    start = handle.tell()
+                    raw = handle.readline()
+                    if not raw:
+                        break
+                    has_newline = raw.endswith(b"\n")
+                    try:
+                        row = json.loads(raw)
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        if not has_newline:
+                            handle.seek(start)
+                            break
+                        current_offset = handle.tell()
+                        consumed_bytes += current_offset - start
+                        continue
+                    current_offset = handle.tell()
+                    consumed_bytes += current_offset - start
+                    parsed_lines += 1
+                    if not isinstance(row, dict):
+                        continue
+                    event = codex_log_event(row, metadata, counters, fallback) \
+                        if provider_id == "codex" else claude_log_event(row, metadata, fallback)
+                    if event:
+                        if insert_usage_event(db, event):
+                            inserted += 1
+                        else:
+                            duplicates += 1
+        except OSError:
+            continue
+        files_processed += 1
+        try:
+            latest_stat = path.stat()
+        except OSError:
+            latest_stat = stat
+        save_import_cursor(db, provider_id, path, latest_stat, current_offset, metadata, counters)
+
+    db.commit()
+    return {
+        "ok": True,
+        "inserted": inserted,
+        "duplicates": duplicates,
+        "parsedLines": parsed_lines,
+        "consumedBytes": consumed_bytes,
+        "filesProcessed": files_processed,
+        "filesDiscovered": len(files),
+        "partial": consumed_bytes >= byte_budget,
+        "usage": usage_snapshot(db),
+    }
 
 
 def record_attention(db: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
@@ -749,7 +1151,10 @@ def emit(value: dict[str, Any]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["init", "snapshot", "sync-snapshot", "record-usage", "record-attention", "usage-day"])
+    parser.add_argument("command", choices=[
+        "init", "snapshot", "sync-snapshot", "record-usage", "record-attention",
+        "usage-day", "import-local-usage",
+    ])
     parser.add_argument("payload", nargs="?", default="{}")
     parser.add_argument("--retention-hours", type=int, default=24)
     args = parser.parse_args(argv)
@@ -768,6 +1173,8 @@ def main(argv: list[str] | None = None) -> int:
                 emit(record_attention(db, payload_arg(args.payload)))
             elif args.command == "usage-day":
                 emit(usage_day_detail(db, text(payload_arg(args.payload).get("date"))))
+            elif args.command == "import-local-usage":
+                emit(import_local_usage(db, payload_arg(args.payload)))
     except (ValueError, RuntimeError, sqlite3.Error, json.JSONDecodeError) as error:
         emit({"ok": False, "error": str(error)})
         return 1

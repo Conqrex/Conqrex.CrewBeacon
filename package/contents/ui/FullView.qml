@@ -108,7 +108,7 @@ Item {
                         width: 7
                         height: 7
                         radius: 3.5
-                        color: full.hosts.length > 0
+                        color: full.agentSessions.length > 0
                             ? Kirigami.Theme.positiveTextColor
                             : Kirigami.Theme.disabledTextColor
                     }

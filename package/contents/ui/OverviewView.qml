@@ -233,13 +233,18 @@ Item {
         MouseArea {
             id: cardMouse
             anchors.fill: parent
-            enabled: !!card.session.deepLink
+            enabled: !!card.session.deepLink || !!card.session.workingDirectory
             hoverEnabled: true
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: overview.openAgentRequested(card.session.deepLink)
+            onClicked: {
+                if (card.session.deepLink) overview.openAgentRequested(card.session.deepLink)
+                else overview.openSessionRequested(card.session.workingDirectory)
+            }
             PlasmaComponents.ToolTip {
                 visible: cardMouse.containsMouse && cardMouse.enabled
-                text: i18n("Open this agent in Paseo")
+                text: card.session.deepLink
+                    ? i18n("Open this agent in Paseo")
+                    : i18n("Open this local session folder")
             }
         }
     }
@@ -358,7 +363,7 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 text: overview.agentSessions.length === 0
-                    ? i18n("No recent agents. Check the source status below or add a Paseo source in settings.")
+                    ? i18n("No recent agents. Start a local Claude/Codex session or check the Paseo sources below.")
                     : i18n("No agents match this filter.")
                 opacity: 0.58
                 font.pointSize: Kirigami.Theme.smallFont.pointSize

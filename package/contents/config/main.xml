@@ -86,6 +86,20 @@
             <label>Show a colored dot for live Claude/Codex sessions</label>
             <default>false</default>
         </entry>
+        <entry name="showLocalSessions" type="Bool">
+            <label>Show local Claude and Codex editor or CLI sessions in the agent list</label>
+            <default>true</default>
+        </entry>
+        <entry name="recordLocalUsage" type="Bool">
+            <label>Import provider-reported usage counters from local Claude and Codex logs</label>
+            <default>true</default>
+        </entry>
+        <entry name="localUsageHistoryDays" type="Int">
+            <label>How many days of recently updated local usage logs to scan incrementally</label>
+            <default>7</default>
+            <min>1</min>
+            <max>30</max>
+        </entry>
         <entry name="sessionCommand" type="String">
             <label>Command to open an assistant session's folder (%d = the cwd)</label>
             <default>konsole --workdir %d</default>
