@@ -212,6 +212,7 @@ Technical documentation:
 
 - [**OctoPulse**](https://github.com/Conqrex/Conqrex.OctoPulse) — GitHub Actions monitoring from the Plasma panel.
 - [**Dockswain**](https://github.com/Conqrex/Conqrex.Dockswain) — Docker host management over SSH.
+- [**MemoKeel**](https://github.com/Conqrex/Conqrex.MemoKeel) — notes, to-dos, kanban and reminders in one local-first panel popup.
 
 ## 📄 License
 
