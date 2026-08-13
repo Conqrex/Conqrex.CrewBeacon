@@ -42,6 +42,14 @@
 
 ## 📦 Install
 
+### Arch / CachyOS (AUR)
+
+```sh
+yay -S crewbeacon
+```
+
+### From source
+
 ```sh
 git clone https://github.com/Conqrex/Conqrex.CrewBeacon.git
 cd Conqrex.CrewBeacon
