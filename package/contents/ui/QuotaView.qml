@@ -114,6 +114,8 @@ ColumnLayout {
         case "no_credentials":
         case "no_token":
             return i18n("Not signed in");
+        case "no_subscription":
+            return i18n("OpenCode Go subscription required");
         case "token_expired":
         case "http_401":
         case "http_403":

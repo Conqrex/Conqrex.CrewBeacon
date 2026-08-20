@@ -316,6 +316,7 @@ PlasmoidItem {
         switch (id) {
         case "claude":  return Plasmoid.configuration.providerClaude;
         case "codex":   return Plasmoid.configuration.providerCodex;
+        case "opencode": return Plasmoid.configuration.providerOpencode;
         case "copilot": return Plasmoid.configuration.providerCopilot;
         case "gemini":  return Plasmoid.configuration.providerGemini;
         }
@@ -410,6 +411,7 @@ PlasmoidItem {
     readonly property var providersList: buildProviders(
         Plasmoid.configuration.providerClaude,
         Plasmoid.configuration.providerCodex,
+        Plasmoid.configuration.providerOpencode,
         Plasmoid.configuration.providerCopilot,
         Plasmoid.configuration.providerGemini,
         Plasmoid.configuration.usageDisplay,
@@ -428,8 +430,9 @@ PlasmoidItem {
         };
     }
 
-    function buildProviders(mClaude, mCodex, mCopilot, mGemini, displayMode, dmap, rmap) {
-        var modes = { claude: mClaude, codex: mCodex, copilot: mCopilot, gemini: mGemini };
+    function buildProviders(mClaude, mCodex, mOpencode, mCopilot, mGemini, displayMode, dmap, rmap) {
+        var modes = { claude: mClaude, codex: mCodex, opencode: mOpencode,
+                      copilot: mCopilot, gemini: mGemini };
         var out = [];
         for (var i = 0; i < Providers.ORDER.length; i++) {
             var id = Providers.ORDER[i];

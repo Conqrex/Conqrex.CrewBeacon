@@ -54,6 +54,10 @@
             <label>Codex provider: auto (show if signed in), on or off</label>
             <default>auto</default>
         </entry>
+        <entry name="providerOpencode" type="String">
+            <label>OpenCode Go provider: auto (show if signed in), on or off</label>
+            <default>auto</default>
+        </entry>
         <entry name="providerCopilot" type="String">
             <label>GitHub Copilot provider: auto (show if signed in), on or off</label>
             <default>auto</default>

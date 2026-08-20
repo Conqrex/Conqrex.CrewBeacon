@@ -5,7 +5,7 @@
 // dispatcher all agree on ids, order and presentation.
 
 // Render order (top-to-bottom in the popup, and the tri-state combo order).
-var ORDER = ["claude", "codex", "copilot", "gemini"];
+var ORDER = ["claude", "codex", "opencode", "copilot", "gemini"];
 
 // Per-provider presentation. `badge` + `color` draw the little heading chip;
 // `live` marks whether a usable free usage read exists (gemini is detect-only).
@@ -14,6 +14,8 @@ var REGISTRY = {
                dash: "https://claude.ai/settings/usage" },
     codex:   { label: "Codex",   badge: "⌥", color: "#10A37F", live: true,
                dash: "https://chatgpt.com/#settings/Account" },
+    opencode:{ label: "OpenCode Go", badge: "◉", color: "#F97316", live: true,
+               dash: "https://opencode.ai/workspace" },
     copilot: { label: "Copilot", badge: "❉", color: "#6E9BF4", live: true,
                dash: "https://github.com/settings/copilot" },
     gemini:  { label: "Gemini",  badge: "✦", color: "#8E7CFF", live: false,

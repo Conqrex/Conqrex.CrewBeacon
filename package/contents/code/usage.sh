@@ -10,6 +10,7 @@
 #   usage.sh detect                 # probe which providers are signed in (no network)
 #   usage.sh claude [TOKEN_SOURCE]  # Anthropic Claude   (GET api.anthropic.com/api/oauth/usage)
 #   usage.sh codex                  # OpenAI Codex        (GET chatgpt.com/backend-api/wham/usage)
+#   usage.sh opencode               # OpenCode Go         (GET opencode.ai/zen/go/v1/usage)
 #   usage.sh copilot                # GitHub Copilot      (GET api.github.com/copilot_internal/user)
 #   usage.sh gemini                 # Google Gemini       (free tier retired 2026-06-18 -> unavailable)
 #
@@ -39,6 +40,7 @@ label_of() {
     case "$1" in
         claude)  echo "Claude"  ;;
         codex)   echo "Codex"   ;;
+        opencode) echo "OpenCode Go" ;;
         copilot) echo "Copilot" ;;
         gemini)  echo "Gemini"  ;;
         *)       echo "$1"      ;;
@@ -163,6 +165,10 @@ claude_token_expired() { # [source]
 
 codex_auth_file() { printf '%s/auth.json' "${CODEX_HOME:-$HOME/.codex}"; }
 
+opencode_auth_file() {
+    printf '%s/opencode/auth.json' "${XDG_DATA_HOME:-$HOME/.local/share}"
+}
+
 copilot_token() { # prints a gho_/ghu_ style token from env or the copilot config files
     local v f t
     for v in "${COPILOT_GITHUB_TOKEN:-}" "${GH_TOKEN:-}" "${GITHUB_TOKEN:-}"; do
@@ -199,6 +205,11 @@ detect_one() { # provider -> {"detected":bool,"reason":"..."}
             if [ -r "$f" ] && jq -e '.tokens.access_token and .tokens.account_id' "$f" >/dev/null 2>&1
             then echo '{"detected":true,"reason":"ok"}'
             else echo '{"detected":false,"reason":"no_credentials"}'; fi ;;
+        opencode)
+            local f; f="$(opencode_auth_file)"
+            if [ -r "$f" ] && jq -e '."opencode-go".key | strings | length > 0' "$f" >/dev/null 2>&1
+            then echo '{"detected":true,"reason":"ok"}'
+            else echo '{"detected":false,"reason":"no_credentials"}'; fi ;;
         copilot)
             if copilot_token >/dev/null 2>&1
             then echo '{"detected":true,"reason":"ok"}'
@@ -213,8 +224,8 @@ detect_one() { # provider -> {"detected":bool,"reason":"..."}
 }
 
 do_detect() {
-    printf '{"providers":{"claude":%s,"codex":%s,"copilot":%s,"gemini":%s}}\n' \
-        "$(detect_one claude)" "$(detect_one codex)" \
+    printf '{"providers":{"claude":%s,"codex":%s,"opencode":%s,"copilot":%s,"gemini":%s}}\n' \
+        "$(detect_one claude)" "$(detect_one codex)" "$(detect_one opencode)" \
         "$(detect_one copilot)" "$(detect_one gemini)"
     exit 0
 }
@@ -320,6 +331,25 @@ normalize_codex_body() { # response-file [captured-at]
     ' "$1" 2>/dev/null
 }
 
+normalize_opencode_body() { # response-file [captured-at]
+    jq -c --arg fa "${2:-$ISO_NOW}" '
+        def usage_window(wid; title; window_cap; value):
+            if value == null or (value.percent // null) == null then empty
+            else { id:wid, label:title, cap:window_cap, extra:false,
+                   pct:((value.percent | tonumber) | round),
+                   reset:(value.resetsAt // value.resets_at // null),
+                   limited:((value.status // "ok") == "rate-limited") }
+            end;
+        (.usage // .) as $usage
+        | { ok:true, provider:"opencode", label:"OpenCode Go", plan:"Go",
+            gauges:[usage_window("session"; "5-hour"; "5H"; $usage.rolling),
+                    usage_window("weekly"; "Weekly"; "7D"; $usage.weekly),
+                    usage_window("monthly"; "Monthly"; "1M"; $usage.monthly)],
+            fetchedAt:$fa }
+        | if (.gauges|length) == 0 then error("no_windows") else . end
+    ' "$1" 2>/dev/null
+}
+
 fetch_claude() {
     local src="${1:-auto}"
     serve_fresh claude && exit 0
@@ -396,6 +426,43 @@ fetch_codex() {
     rm -f "$body"
     clear_fail codex
     finish codex "$out"
+}
+
+fetch_opencode() {
+    serve_fresh opencode && exit 0
+    in_backoff opencode && emit_stale_or_err opencode backoff
+    take_lock opencode
+    serve_fresh opencode && exit 0
+
+    local f token
+    f="$(opencode_auth_file)"
+    [ -r "$f" ] || emit_err opencode no_credentials
+    token="$(jq -r '."opencode-go".key // empty' "$f" 2>/dev/null)"
+    [ -n "$token" ] || emit_err opencode no_token
+
+    local base body http rc out
+    base="${OPENCODE_GO_BASE_URL:-https://opencode.ai/zen/go/v1}"
+    body="$(mktemp 2>/dev/null)" || emit_err opencode mktemp
+    http="$(curl -s --max-time 8 -o "$body" -w '%{http_code}' \
+        "${base}/usage" \
+        -H "Authorization: Bearer ${token}" \
+        -H "User-Agent: opencode/$(opencode --version 2>/dev/null || printf 'unknown')" \
+        -H "Accept: application/json" 2>/dev/null)"
+    rc=$?
+    [ "$rc" -eq 0 ] || { rm -f "$body"; record_fail opencode; emit_stale_or_err opencode "curl_${rc}"; }
+    if [ "$http" != "200" ]; then
+        rm -f "$body"
+        { [ "$http" = "401" ]; } && emit_err opencode token_expired
+        { [ "$http" = "403" ]; } && emit_err opencode no_subscription
+        record_fail opencode
+        emit_stale_or_err opencode "http_${http}"
+    fi
+
+    out="$(normalize_opencode_body "$body")"
+    rm -f "$body"
+    [ -n "$out" ] || { record_fail opencode; emit_stale_or_err opencode bad_json; }
+    clear_fail opencode
+    finish opencode "$out"
 }
 
 fetch_copilot() {
@@ -627,7 +694,7 @@ do_activity() {
 # ==============================================================================
 do_statusline() {
     local want="${1:-}" provs line="" sep="" p f seg
-    if [ -n "$want" ]; then provs="$want"; else provs="claude codex copilot"; fi
+    if [ -n "$want" ]; then provs="$want"; else provs="claude codex opencode copilot"; fi
     for p in $provs; do
         f="$(cache_path "$p")"
         [ -f "$f" ] || continue
@@ -720,11 +787,13 @@ case "$PROVIDER" in
     statusline)    shift; do_statusline "${1:-}" ;;
     _normalize-claude) shift; normalize_claude_body "$1" "${2:-$ISO_NOW}" ;;
     _normalize-codex)  shift; normalize_codex_body "$1" "${2:-$ISO_NOW}" ;;
+    _normalize-opencode) shift; normalize_opencode_body "$1" "${2:-$ISO_NOW}" ;;
     hooks-status)  hooks_status ;;
     hooks-install) hooks_install ;;
     hooks-remove)  hooks_remove ;;
     claude)        shift; fetch_claude "${1:-auto}" ;;
     codex)         fetch_codex ;;
+    opencode)      fetch_opencode ;;
     copilot)       fetch_copilot ;;
     gemini)        fetch_gemini ;;
     *)             emit_err "$PROVIDER" unknown_provider ;;

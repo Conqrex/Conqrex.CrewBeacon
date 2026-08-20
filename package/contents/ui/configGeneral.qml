@@ -46,6 +46,7 @@ KCM.SimpleKCM {
     property string cfg_accent: "auto"
     property string cfg_providerClaude: "auto"
     property string cfg_providerCodex: "auto"
+    property string cfg_providerOpencode: "auto"
     property string cfg_providerCopilot: "auto"
     property string cfg_providerGemini: "auto"
     property string cfg_compactProvider: "all-weekly"
@@ -167,6 +168,11 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Codex:")
             pid: "codex"; value: page.cfg_providerCodex
             onPicked: (v) => page.cfg_providerCodex = v
+        }
+        ProviderRow {
+            Kirigami.FormData.label: i18n("OpenCode Go:")
+            pid: "opencode"; value: page.cfg_providerOpencode
+            onPicked: (v) => page.cfg_providerOpencode = v
         }
         ProviderRow {
             Kirigami.FormData.label: i18n("GitHub Copilot:")
@@ -332,6 +338,7 @@ KCM.SimpleKCM {
                 { key: "hottest", label: i18n("Busiest gauge") },
                 { key: "claude",  label: i18n("Claude") },
                 { key: "codex",   label: i18n("Codex") },
+                { key: "opencode", label: i18n("OpenCode Go") },
                 { key: "copilot", label: i18n("GitHub Copilot") }
             ]
             currentIndex: Math.max(0, indexOfValue(page.cfg_compactProvider))

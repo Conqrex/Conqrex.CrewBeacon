@@ -67,13 +67,21 @@ const compactRows = [
     gauges: [{ id: "primary", label: "Weekly", cap: "7D", pct: 17, usedPct: 17, extra: false }]
   },
   {
+    id: "opencode", label: "OpenCode Go", badge: "◉", color: "#F97316", ok: true,
+    gauges: [
+      { id: "session", label: "5-hour", cap: "5H", pct: 12, usedPct: 12, extra: false },
+      { id: "weekly", label: "Weekly", cap: "7D", pct: 58, usedPct: 58, extra: false },
+      { id: "monthly", label: "Monthly", cap: "1M", pct: 29, usedPct: 29, extra: false }
+    ]
+  },
+  {
     id: "copilot", label: "Copilot", badge: "❉", color: "#6E9BF4", ok: true,
     gauges: [{ id: "premium", label: "Premium requests", cap: "30D", pct: 50, usedPct: 50, extra: false }]
   }
 ];
 const weeklyCompact = providers.compactItems(compactRows, "all-weekly");
-assert.deepEqual(Array.from(weeklyCompact, item => item.id), ["claude", "codex"]);
-assert.deepEqual(Array.from(weeklyCompact, item => item.pct), [53, 17]);
+assert.deepEqual(Array.from(weeklyCompact, item => item.id), ["claude", "codex", "opencode"]);
+assert.deepEqual(Array.from(weeklyCompact, item => item.pct), [53, 17, 58]);
 assert.equal(providers.compactItems(compactRows, "hottest")[0].id, "claude");
 assert.equal(providers.compactItems(compactRows, "codex")[0].pct, 17);
 
