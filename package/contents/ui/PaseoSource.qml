@@ -3,7 +3,7 @@ import QtWebSockets
 import org.kde.plasma.plasma5support as Plasma5Support
 import "../code/paseo.js" as Paseo
 
-// One read-only Paseo 0.2.x source. It owns transport/version handling and
+// One read-only Paseo wire-protocol 1 source. It owns transport handling and
 // emits only normalized CrewBeacon domain objects.
 Item {
     id: sourceItem
@@ -232,7 +232,7 @@ Item {
             clientId: "crewbeacon-" + sourceId,
             clientType: "browser",
             protocolVersion: 1,
-            appVersion: "0.1.2",
+            appVersion: "0.1.3",
             capabilities: { projectUpdates: true, selectiveAgentTimeline: true }
         })
     }
@@ -307,20 +307,11 @@ Item {
     }
 
     function handleServerInfo(payload) {
-        if (!payload || !payload.serverId) {
+        var result = Paseo.serverInfoCompatibility(payload)
+        if (!result.compatible) {
             compatible = false
             connectionState = "Failed"
-            connectionError = "Paseo server_info is missing a server ID"
-            socketWanted = false
-            emitSnapshot()
-            return
-        }
-        var version = payload.version || ""
-        if (version && !/^0\.2\./.test(version)) {
-            serverInfo = payload
-            compatible = false
-            connectionState = "Unsupported"
-            connectionError = "Unsupported Paseo daemon version " + version + " (expected 0.2.x)"
+            connectionError = result.error
             socketWanted = false
             emitSnapshot()
             return

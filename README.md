@@ -77,9 +77,10 @@ The default source is already configured:
 Local Paseo · ws://127.0.0.1:6767/ws
 ```
 
-Paseo must be running. CrewBeacon performs the protocol handshake, verifies a
-`0.2.x` daemon, subscribes to session/workspace updates, and never sends agent
-control requests.
+Paseo must be running. CrewBeacon performs the wire-protocol 1 handshake,
+subscribes to session/workspace updates, and never sends agent control requests.
+Paseo product releases are accepted after a valid handshake; optional additions
+remain capability-gated through `server_info.features`.
 
 ### Local editors and CLIs
 
@@ -168,10 +169,10 @@ consumption.
 | Missing provider fields | Hidden or shown as unavailable, never replaced with zero |
 | Quota windows | Displayed only under Quota; never interpreted as token usage |
 
-Paseo `0.2.5` does not expose a historical stream of missed per-turn usage
-deltas via the directory snapshot, so relay snapshots are never converted into
-usage. Local Claude/Codex logs provide a separate, bounded backfill path when
-enabled. See the exact [protocol evidence](docs/PASEO-PROTOCOL.md).
+Paseo's directory snapshot does not expose a historical stream of missed
+per-turn usage deltas, so relay snapshots are never converted into usage. Local
+Claude/Codex logs provide a separate, bounded backfill path when enabled. See
+the exact [protocol evidence](docs/PASEO-PROTOCOL.md).
 
 ## 🖥️ Requirements
 

@@ -1,8 +1,8 @@
 # CrewBeacon — Paseo protocol compatibility
 
-**Verified:** 2026-08-09  
-**Supported direct adapter:** Paseo daemon `0.2.x`, wire protocol `1`  
-**Concrete verification target:** CLI, daemon, `@getpaseo/client`, and `@getpaseo/protocol` version `0.2.5`
+**Verified:** 2026-08-20
+**Supported direct adapter:** Paseo wire protocol `1`
+**Concrete verification targets:** daemon `0.2.5` and `0.4.0`; current official protocol/client source
 
 ## Primary evidence
 
@@ -97,7 +97,11 @@ Connection is considered ready only after this wrapped server message:
 }
 ```
 
-CrewBeacon rejects a missing/malformed server identity and reports non-`0.2.x` versions as unsupported instead of assuming compatibility.
+CrewBeacon rejects a missing/malformed server identity. The product `version`
+is informational: the official client contract keeps daemon/client releases
+wire-compatible, with optional additions advertised through
+`server_info.features`. A valid `server_info` response to CrewBeacon's
+protocol-1 hello is therefore accepted across Paseo product releases.
 
 ## Read-only requests
 

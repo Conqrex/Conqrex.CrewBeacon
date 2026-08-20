@@ -1,6 +1,6 @@
 .pragma library
 
-// Paseo 0.2.x adapter boundary. External protocol values are translated here;
+// Paseo wire-protocol 1 adapter boundary. External protocol values are translated here;
 // QML views only consume CrewBeacon's normalized model.
 
 var NORMALIZED_STATES = [
@@ -30,6 +30,18 @@ function finiteNumber(value) {
 
 function stringValue(value) {
     return typeof value === "string" && value.trim() !== "" ? value.trim() : "";
+}
+
+// The daemon product version is informational. Paseo's supported client SDK
+// keeps the wire protocol compatible across releases and gates additions via
+// server_info.features, so rejecting a new 0.x release breaks valid clients.
+// Receiving a well-formed server_info after our protocolVersion: 1 hello is the
+// compatibility proof available on the wire.
+function serverInfoCompatibility(payload) {
+    if (!isObject(payload) || !stringValue(payload.serverId)) {
+        return { compatible: false, error: "Paseo server_info is missing a server ID" };
+    }
+    return { compatible: true, error: "" };
 }
 
 function basename(path) {
@@ -321,7 +333,7 @@ function usageEventFromStream(source, session, payload) {
         contextMaxTokens: contextMax,
         reportedCost: cost,
         currency: cost !== null ? "USD" : "",
-        provenance: "paseo:0.2.x:turn_completed",
+        provenance: "paseo:protocol-1:turn_completed",
         quality: "provider-reported",
         metricKind: hasDelta ? "event_delta" : "context_snapshot"
     };

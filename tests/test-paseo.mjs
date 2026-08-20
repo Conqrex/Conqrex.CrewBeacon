@@ -14,6 +14,15 @@ vm.runInContext(source, adapter, { filename: adapterPath });
 const fixture = JSON.parse(fs.readFileSync(path.join(here, "fixtures", "paseo-0.2.5.json"), "utf8"));
 const workspaces = Object.fromEntries(fixture.workspaces.map(workspace => [workspace.id, workspace]));
 
+assert.deepEqual(
+  JSON.parse(JSON.stringify(adapter.serverInfoCompatibility({ serverId: "srv-current", version: "0.4.0" }))),
+  { compatible: true, error: "" },
+  "Paseo product releases remain compatible when the protocol-1 handshake succeeds"
+);
+assert.equal(adapter.serverInfoCompatibility({ serverId: "srv-future", version: "1.0.0" }).compatible, true);
+assert.equal(adapter.serverInfoCompatibility({ version: "0.4.0" }).compatible, false,
+             "a malformed server identity must still be rejected");
+
 assert.equal(
   adapter.canonicalizeRemote("git@github.com:Conqrex/Conqrex.Engine.git"),
   "github.com/conqrex/conqrex.engine"

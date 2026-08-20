@@ -51,7 +51,7 @@ class StoreTests(unittest.TestCase):
             "cacheReadTokens": 60,
             "reportedCost": 0.02,
             "currency": "USD",
-            "provenance": "paseo:0.2.x:turn_completed",
+            "provenance": "paseo:protocol-1:turn_completed",
             "quality": "provider-reported",
             "metricKind": "event_delta",
         }

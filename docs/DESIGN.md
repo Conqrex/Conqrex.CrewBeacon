@@ -18,7 +18,7 @@ and agent state.
 |---|---|
 | Product scope | Standalone Plasma widget for provider quota, live agents, attention, source health, and daily usage history |
 | UI | Plasma 6 QML/Kirigami; OctoPulse palette and geometry; Overview and Usage tabs |
-| Paseo transport | Native Qt WebSockets for narrow `0.2.x` direct support; official CLI for E2EE offer-link relay polling |
+| Paseo transport | Native Qt WebSockets for wire-protocol 1 direct support; official CLI for E2EE offer-link relay polling |
 | Source topology | Independent source objects merged at the root; direct and relay failures remain isolated |
 | Remote control | Out of scope; only list/subscription/timeline-subscription requests are sent |
 | Persistence | Small on-demand Python standard-library SQLite helper; no resident companion daemon |
@@ -40,7 +40,7 @@ and agent state.
 │      └─ UsageHistoryView: calendar + selected-day drill-down     │
 │                                                                  │
 │ PaseoSource × N                                                  │
-│  ├─ direct: Qt WebSocket + hello/version gate                    │
+│  ├─ direct: Qt WebSocket + protocol-1 hello/server-info gate     │
 │  ├─ relay: official Paseo CLI + private offer file               │
 │  ├─ direct agent/workspace subscriptions                         │
 │  ├─ capped reconnect                                             │
@@ -109,7 +109,8 @@ restart duplicates.
 - Persisted snapshots restore useful state before a reconnect finishes.
 - Reconnect starts at 1.5 seconds, doubles, caps at 30 seconds, and adds bounded jitter.
 - A malformed/unknown message increments source diagnostics and is ignored.
-- A non-`0.2.x` server is shown as unsupported and is not retried indefinitely.
+- A malformed `server_info` identity is rejected and is not retried indefinitely.
+- Paseo product versions are informational; optional behavior is gated by advertised features.
 - Usage and attention inserts are idempotent.
 - Repository rollups calculate local day, calendar week, and calendar month boundaries then query UTC timestamps.
 
