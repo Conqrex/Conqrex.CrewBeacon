@@ -28,6 +28,12 @@ function meta(id) {
 
 function label(id) { return meta(id).label; }
 
+// Treat absent/new settings as auto so upgrades pick up newly-added providers
+// without requiring the user to open and save the configuration page.
+function mode(value) {
+    return value === "on" || value === "off" ? value : "auto";
+}
+
 // Pick a provider's primary weekly window. Claude exposes both a general
 // weekly window and optional scoped weekly windows; only the general one is a
 // panel headline. Codex currently reports its 7-day limit as `primary`.

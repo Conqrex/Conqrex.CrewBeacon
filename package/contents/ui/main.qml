@@ -436,12 +436,12 @@ PlasmoidItem {
         var out = [];
         for (var i = 0; i < Providers.ORDER.length; i++) {
             var id = Providers.ORDER[i];
-            var mode = modes[id] || "off";
-            if (mode === "off") continue;
+            var providerSetting = Providers.mode(modes[id]);
+            if (providerSetting === "off") continue;
 
             var det = dmap[id];
             var detected = det ? det.detected : false;
-            if (mode === "auto" && !detected) continue;   // auto: only when present
+            if (providerSetting === "auto" && !detected) continue;   // auto: only when present
 
             var m = Providers.meta(id);
             var row = { id: id, label: m.label, badge: m.badge, color: m.color,
@@ -541,19 +541,19 @@ PlasmoidItem {
     }
 
     function applyResult(id, stdout) {
-        var rm = root.resultMap;
+        var result;
         try {
-            rm[id] = JSON.parse(stdout);
-            rm[id].quotaSnapshot = Quota.normalizeEnvelope(id, rm[id]);
+            result = JSON.parse(stdout);
+            result.quotaSnapshot = Quota.normalizeEnvelope(id, result);
         } catch (e) {
-            rm[id] = { ok: false, reason: "parse_error", gauges: [] };
+            result = { ok: false, reason: "parse_error", gauges: [] };
         }
-        root.resultMap = rm;            // reassign to trigger the providersList binding
+        root.resultMap = Quota.withProviderResult(root.resultMap, id, result);
         root.lastUpdated = Qt.formatTime(new Date(),
             Plasmoid.configuration.timeFormat24h ? "HH:mm" : "h:mm AP");
-        root.checkResets(id, rm[id]);
-        root.checkThresholds(id, rm[id]);
-        root.checkSignIn(id, rm[id]);
+        root.checkResets(id, result);
+        root.checkThresholds(id, result);
+        root.checkSignIn(id, result);
     }
 
     // ----------------------------------------------------------------------
@@ -830,7 +830,8 @@ PlasmoidItem {
             var id = providerOfSource(source);
             if (id !== "") {
                 if (data["exit code"] === 0) root.applyResult(id, out);
-                else { var rm = root.resultMap; rm[id] = { ok: false, reason: "exec_error", gauges: [] }; root.resultMap = rm; }
+                else root.resultMap = Quota.withProviderResult(root.resultMap, id,
+                    { ok: false, reason: "exec_error", gauges: [] });
             }
             disconnectSource(source);
         }

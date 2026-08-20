@@ -47,6 +47,16 @@ const clamped = quota.normalizeEnvelope("test", { ok: true, gauges: [{ pct: 140 
 assert.equal(clamped.windows[0].pct, 100);
 assert.equal(clamped.windows[1].pct, 0);
 
+const initialResults = { claude: { ok: true } };
+const startupResults = quota.withProviderResult(initialResults, "opencode", { ok: true, gauges: [] });
+assert.notEqual(startupResults, initialResults, "startup fetch must replace the map to notify QML bindings");
+assert.equal(initialResults.opencode, undefined, "copy-on-write must not mutate the currently-bound map");
+assert.equal(startupResults.opencode.ok, true);
+
+assert.equal(providers.mode(undefined), "auto");
+assert.equal(providers.mode(""), "auto");
+assert.equal(providers.mode("off"), "off");
+
 assert.equal(format.clampPct(101), 100);
 assert.equal(format.clampPct(-1), 0);
 assert.equal(format.formatCountdown(3_661_000), "1h 1m");

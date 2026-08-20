@@ -232,7 +232,7 @@ Item {
             clientId: "crewbeacon-" + sourceId,
             clientType: "browser",
             protocolVersion: 1,
-            appVersion: "0.1.1",
+            appVersion: "0.1.2",
             capabilities: { projectUpdates: true, selectiveAgentTimeline: true }
         })
     }

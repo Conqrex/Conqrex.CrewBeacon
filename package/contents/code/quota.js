@@ -44,3 +44,14 @@ function normalizeEnvelope(providerId, envelope) {
         error: raw.ok === true ? "" : (raw.reason || "unavailable")
     }
 }
+
+// QML var properties only notify bindings when assigned a different object.
+// Provider fetches therefore update maps copy-on-write instead of mutating the
+// existing object, which lets the first startup response replace "Loading".
+function withProviderResult(current, providerId, result) {
+    var next = {}
+    var source = current && typeof current === "object" ? current : {}
+    for (var key in source) next[key] = source[key]
+    next[providerId] = result
+    return next
+}
