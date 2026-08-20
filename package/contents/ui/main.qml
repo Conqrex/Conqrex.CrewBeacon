@@ -415,6 +415,8 @@ PlasmoidItem {
         Plasmoid.configuration.providerCopilot,
         Plasmoid.configuration.providerGemini,
         Plasmoid.configuration.usageDisplay,
+        Plasmoid.configuration.hiddenQuotaWindows,
+        Plasmoid.configuration.showWeeklySonnet,
         detectMap, resultMap)
 
     function enrichGauge(g, displayMode) {
@@ -430,7 +432,8 @@ PlasmoidItem {
         };
     }
 
-    function buildProviders(mClaude, mCodex, mOpencode, mCopilot, mGemini, displayMode, dmap, rmap) {
+    function buildProviders(mClaude, mCodex, mOpencode, mCopilot, mGemini, displayMode,
+                            hiddenQuotaWindows, showWeeklySonnet, dmap, rmap) {
         var modes = { claude: mClaude, codex: mCodex, opencode: mOpencode,
                       copilot: mCopilot, gemini: mGemini };
         var out = [];
@@ -463,6 +466,8 @@ PlasmoidItem {
                     row.staleAgeSec = res.staleAgeSec || 0;
                     row.bankedRefreshes = (res.bankedRefreshes !== undefined) ? res.bankedRefreshes : null;
                     var quotaWindows = res.quotaSnapshot ? res.quotaSnapshot.windows : (res.gauges || []);
+                    quotaWindows = Providers.visibleGauges(id, quotaWindows, hiddenQuotaWindows,
+                                                          showWeeklySonnet);
                     row.gauges = quotaWindows.map(function(g) { return enrichGauge(g, displayMode); });
                 } else {
                     row.loading = true;                  // detected, fetch in flight

@@ -66,6 +66,10 @@
             <label>Gemini provider: auto (show if signed in), on or off</label>
             <default>auto</default>
         </entry>
+        <entry name="hiddenQuotaWindows" type="String">
+            <label>JSON array of provider quota-window IDs hidden by the user</label>
+            <default>[]</default>
+        </entry>
         <entry name="compactProvider" type="String">
             <label>Which provider gauges the panel shows: all weekly, first, hottest or a provider id</label>
             <default>all-weekly</default>

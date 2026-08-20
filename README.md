@@ -33,7 +33,7 @@
 | 🤖 **Compact crew overview** | Filterable two-line cards merge Paseo agents with active local Claude/Codex editor and CLI sessions. VS Code sessions are labeled explicitly and open their workspace on click. |
 | 🌐 **Server-first** | Observe local Paseo, a dedicated development server, and additional hosts through independent direct or official relay sources. One source failing does not blank the others. |
 | 📅 **Daily usage history** | A 371-day calendar heatmap opens each local day into repository, provider/model, session, and individual-call detail. Recent local Claude/Codex usage is imported incrementally. |
-| ⏱️ **Provider quota** | Claude, Codex, OpenCode Go, Copilot, and Gemini detection; usage windows; reset times; plan details; stale-data fallback; ring/bar modes; and quota alerts built into CrewBeacon. |
+| ⏱️ **Provider quota** | Claude, Codex, OpenCode Go, Copilot, and Gemini detection; dynamically discovered usage windows (including Codex Spark); per-window visibility; reset times; stale-data fallback; ring/bar modes; and quota alerts. |
 | 🎛️ **Weekly panel rings** | Show every visible provider with a primary weekly limit side by side in the panel; Claude and Codex marks can replace center percentages. |
 | 🎨 **Shared visual language** | The bounded popup, navy palette, compact cards, chips, spacing, and optional system-theme mode follow OctoPulse. |
 | 🧭 **Stable attribution** | SSH and HTTPS forms of the same Git remote normalize to one logical repository while workspaces remain distinct. Path-only fallbacks are namespaced by host. |
@@ -144,10 +144,15 @@ Paseo daemon or put a password in the endpoint/configuration string.
 
 ## 🧩 What each tab means
 
-The bounded expanded view keeps two jobs separate:
+The bounded expanded view keeps live status and history separate:
 
-1. **Overview** — attention, a filterable live-agent list, remaining provider quota, and source health.
-2. **Usage** — a local-time monthly calendar and selected-day drill-down by repository, provider/model, session, and recorded turn.
+1. **Overview** — remaining provider quota and reset times.
+2. **Agents** — attention, a filterable live-agent list, and source health.
+3. **Usage** — a local-time monthly calendar and selected-day drill-down by repository, provider/model, session, and recorded turn.
+
+Settings are grouped into Providers, Agents, Appearance, and Notifications.
+Provider quota windows can be expanded and hidden individually; newly reported
+windows are discovered from provider data without a widget update.
 
 Silence never becomes “waiting for input.” CrewBeacon requires an explicit
 Paseo question/permission/attention event.

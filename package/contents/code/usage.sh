@@ -281,6 +281,18 @@ normalize_codex_body() { # response-file [captured-at]
             elif (v|type) == "number" then v
             elif (v|type) == "string" and (v|test("^[0-9]+$")) then (v|tonumber)
             else null end;
+        def slug:
+            ascii_downcase | gsub("[^a-z0-9]+"; "-") | gsub("(^-|-$)"; "");
+        def title_key:
+            gsub("([a-z0-9])([A-Z])"; "\\1 \\2")
+            | gsub("[_-]+"; " ")
+            | split(" ")
+            | map(select(length > 0) | ((.[0:1] | ascii_upcase) + .[1:]))
+            | join(" ");
+        def list(v): if (v|type) == "array" then v else [] end;
+        def unique_ids:
+            reduce .[] as $item ([];
+                if any(.[]; .id == $item.id) then . else . + [$item] end);
         def window_seconds(w): num(w.limit_window_seconds // w.limitWindowSeconds);
         def cap_of(w; fallback):
             window_seconds(w) as $seconds
@@ -288,10 +300,11 @@ normalize_codex_body() { # response-file [captured-at]
               elif ($seconds % 86400) == 0 then (($seconds / 86400 | floor | tostring) + "D")
               elif ($seconds % 3600) == 0 then (($seconds / 3600 | floor | tostring) + "H")
               else fallback end;
-        def label_of_window(w; fallback):
+        def label_of_window(w; fallback; scoped):
             window_seconds(w) as $seconds
-            | if $seconds == 18000 then "Session"
+            | if $seconds == 18000 then (if scoped then "5-hour" else "Session" end)
               elif $seconds != null and $seconds >= 604800 then "Weekly"
+              elif $seconds != null and $seconds >= 86400 then cap_of(w; fallback)
               else fallback end;
         def reset_of(w):
             ((w.reset_at // w.resetAt) as $ra
@@ -300,15 +313,37 @@ normalize_codex_body() { # response-file [captured-at]
                elif (w.reset_after_seconds // w.resetAfterSeconds) != null then
                    ((now + (w.reset_after_seconds // w.resetAfterSeconds))|todate)
                else null end);
-        def win(w; wid; fallback_label; fallback_cap):
-            (if w == null then []
-             else [{ id:wid, label:label_of_window(w; fallback_label),
-                     cap:cap_of(w; fallback_cap), extra:false,
-                     pct:(((w.used_percent // w.usedPercent) // 0)|round),
-                     reset:reset_of(w) }]
-             end);
+        def rate_groups:
+            . as $root
+            | ([{ id:"base", name:"",
+                  rate:($root.rate_limit // $root.rateLimit // $root.rate_limits // $root.rateLimits) }]
+               + [list($root.additional_rate_limits // $root.additionalRateLimits)[]
+                  | { id:(.metered_feature // .meteredFeature // .limit_name // .limitName // "additional"),
+                      name:(.limit_name // .limitName // .metered_feature // .meteredFeature // "Additional limit"),
+                      rate:(.rate_limit // .rateLimit) }]
+               + [$root | to_entries[]
+                  | select(.key != "rate_limit" and .key != "rateLimit"
+                           and (.key | test("(_rate_limit|RateLimit)$")))
+                  | select((.value | type) == "object")
+                  | { id:.key, name:(.key | title_key), rate:.value }])
+            | map(select((.rate | type) == "object"));
+        def windows_of(group):
+            [group.rate | to_entries[]
+             | select((.value | type) == "object")
+             | . as $entry
+             | num($entry.value.used_percent // $entry.value.usedPercent) as $pct
+             | select($pct != null)
+             | ($entry.key | gsub("(_window|Window)$"; "")) as $role
+             | label_of_window($entry.value; ($role | title_key); group.name != "") as $window_label
+             | { id:(if group.id == "base" then ($role | slug)
+                     else ((group.id | slug) + "-" + ($role | slug)) end),
+                 label:(if group.name == "" then $window_label
+                        else (group.name + " · " + $window_label) end),
+                 cap:cap_of($entry.value; ""), extra:false,
+                 pct:($pct | round), reset:reset_of($entry.value),
+                 limited:((group.rate.allowed == false) or (group.rate.limit_reached == true)
+                          or (group.rate.limitReached == true)) }];
         (.rate_limit // .rate_limits // .) as $rl
-        | ($rl.primary // $rl.primary_window // $rl.primaryWindow // .primary // .primary_window // .primaryWindow) as $p
         | ($rl.secondary // $rl.secondary_window // $rl.secondaryWindow // .secondary // .secondary_window // .secondaryWindow) as $s
         | num($rl.banked_refreshes // $rl.bankedRefreshes
               // $rl.refreshes_banked // $rl.refreshesBanked
@@ -324,8 +359,7 @@ normalize_codex_body() { # response-file [captured-at]
         | { ok:true, provider:"codex", label:"Codex",
             plan:(.plan_type // .planType // null),
             bankedRefreshes:$banked,
-            gauges:(win($p; "primary"; "Primary limit"; "")
-                    + win($s; "secondary"; "Secondary limit"; "")),
+            gauges:([rate_groups[] as $group | windows_of($group)[]] | unique_ids),
             fetchedAt:$fa }
         | if (.gauges|length) == 0 then error("no_windows") else . end
     ' "$1" 2>/dev/null
@@ -708,6 +742,30 @@ do_statusline() {
     exit 0
 }
 
+# quota-catalog — expose only sanitized, normalized window metadata from the
+# caches for the settings page. This performs no network request and never
+# reads or emits provider credentials.
+do_quota_catalog() {
+    local p f item sep=""
+    printf '{"providers":{'
+    for p in claude codex opencode copilot gemini; do
+        f="$(cache_path "$p")"
+        [ -r "$f" ] || continue
+        item="$(jq -c '
+            select(.ok == true and (.gauges | type) == "array")
+            | {label:(.label // ""), gauges:[.gauges[]
+                | {id:(.id // ""), label:(.label // "Quota"), cap:(.cap // ""),
+                   extra:(.extra // false)}
+                | select(.id != "")]}
+        ' "$f" 2>/dev/null)"
+        [ -n "$item" ] || continue
+        printf '%s"%s":%s' "$sep" "$p" "$item"
+        sep=,
+    done
+    printf '}}\n'
+    exit 0
+}
+
 # ==============================================================================
 # hooks — install / remove / inspect the Claude Code activity hooks in
 # ~/.claude/settings.json so the config page can offer a one-click setup. The
@@ -784,6 +842,7 @@ PROVIDER="${1:-claude}"
 case "$PROVIDER" in
     detect)        do_detect ;;
     activity)      do_activity ;;
+    quota-catalog) do_quota_catalog ;;
     statusline)    shift; do_statusline "${1:-}" ;;
     _normalize-claude) shift; normalize_claude_body "$1" "${2:-$ISO_NOW}" ;;
     _normalize-codex)  shift; normalize_codex_body "$1" "${2:-$ISO_NOW}" ;;

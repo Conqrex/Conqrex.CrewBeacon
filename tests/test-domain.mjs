@@ -57,6 +57,27 @@ assert.equal(providers.mode(undefined), "auto");
 assert.equal(providers.mode(""), "auto");
 assert.equal(providers.mode("off"), "off");
 
+const codexWindows = [
+  { id: "primary", label: "Weekly" },
+  { id: "codex-bengalfox-primary", label: "Spark · 5-hour" },
+  { id: "codex-bengalfox-secondary", label: "Spark · Weekly" }
+];
+const hiddenSparkWeekly = providers.withWindowVisibility(
+  "[]", "codex", "codex-bengalfox-secondary", false
+);
+assert.equal(hiddenSparkWeekly, '["codex:codex-bengalfox-secondary"]');
+assert.deepEqual(
+  Array.from(providers.visibleGauges("codex", codexWindows, hiddenSparkWeekly, false), g => g.id),
+  ["primary", "codex-bengalfox-primary"]
+);
+assert.equal(
+  providers.withWindowVisibility(hiddenSparkWeekly, "codex", "codex-bengalfox-secondary", true),
+  "[]",
+  "showing a window removes only its stable provider/window key"
+);
+assert.equal(providers.gaugeVisible("claude", "weeklySonnet", "[]", false), false);
+assert.equal(providers.gaugeVisible("claude", "weeklySonnet", "[]", true), true);
+
 assert.equal(format.clampPct(101), 100);
 assert.equal(format.clampPct(-1), 0);
 assert.equal(format.formatCountdown(3_661_000), "1h 1m");

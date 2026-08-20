@@ -4,8 +4,7 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 
-// OctoPulse-aligned shell: a compact operational overview and a separate,
-// scrollable usage-history workspace.
+// OctoPulse-aligned shell with focused overview, agent, and usage workspaces.
 Item {
     id: full
 
@@ -88,8 +87,10 @@ Item {
                 }
                 PlasmaComponents.Label {
                     text: full.currentTab === 0
-                        ? i18n("Agents and quota at a glance")
-                        : i18n("Recorded daily usage history")
+                        ? i18n("Provider quota at a glance")
+                        : full.currentTab === 1
+                          ? i18n("Live agents and source health")
+                          : i18n("Recorded daily usage history")
                     opacity: 0.58
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                 }
@@ -132,7 +133,8 @@ Item {
 
             Repeater {
                 model: [
-                    { label: i18n("Overview"), icon: "view-dashboard", count: full.attentionSessions.length },
+                    { label: i18n("Overview"), icon: "view-dashboard", count: 0 },
+                    { label: i18n("Agents"), icon: "system-run", count: full.attentionSessions.length },
                     { label: i18n("Usage"), icon: "office-chart-bar", count: 0 }
                 ]
                 delegate: Rectangle {
@@ -200,9 +202,6 @@ Item {
 
             OverviewView {
                 providers: full.providers
-                agentSessions: full.agentSessions
-                attentionSessions: full.attentionSessions
-                hosts: full.hosts
                 nowMs: full.nowMs
                 lastUpdated: full.lastUpdated
                 use24h: full.use24h
@@ -211,6 +210,14 @@ Item {
                 mono: full.mono
                 showWeeklySonnet: full.showWeeklySonnet
                 onRefreshRequested: full.refreshRequested()
+                onOpenSessionRequested: (cwd) => full.openSessionRequested(cwd)
+            }
+
+            AgentsView {
+                agentSessions: full.agentSessions
+                attentionSessions: full.attentionSessions
+                hosts: full.hosts
+                nowMs: full.nowMs
                 onOpenSessionRequested: (cwd) => full.openSessionRequested(cwd)
                 onOpenAgentRequested: (deepLink) => full.openAgentRequested(deepLink)
             }

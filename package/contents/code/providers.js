@@ -34,6 +34,46 @@ function mode(value) {
     return value === "on" || value === "off" ? value : "auto";
 }
 
+function windowKey(providerId, gaugeId) {
+    return (providerId || "") + ":" + (gaugeId || "");
+}
+
+function hiddenWindows(raw) {
+    var parsed = [];
+    try { parsed = JSON.parse(raw || "[]"); } catch (error) { parsed = []; }
+    if (!Array.isArray(parsed)) return [];
+    var out = [];
+    for (var i = 0; i < parsed.length; i++)
+        if (typeof parsed[i] === "string" && parsed[i] && out.indexOf(parsed[i]) === -1)
+            out.push(parsed[i]);
+    return out;
+}
+
+function gaugeVisible(providerId, gaugeId, hiddenRaw, showWeeklySonnet) {
+    if (gaugeId === "weeklySonnet" && !showWeeklySonnet) return false;
+    return hiddenWindows(hiddenRaw).indexOf(windowKey(providerId, gaugeId)) === -1;
+}
+
+function visibleGauges(providerId, gauges, hiddenRaw, showWeeklySonnet) {
+    var source = Array.isArray(gauges) ? gauges : [];
+    var out = [];
+    for (var i = 0; i < source.length; i++) {
+        var gauge = source[i] || {};
+        if (gaugeVisible(providerId, gauge.id, hiddenRaw, showWeeklySonnet)) out.push(gauge);
+    }
+    return out;
+}
+
+function withWindowVisibility(hiddenRaw, providerId, gaugeId, visible) {
+    var values = hiddenWindows(hiddenRaw);
+    var key = windowKey(providerId, gaugeId);
+    var index = values.indexOf(key);
+    if (visible && index !== -1) values.splice(index, 1);
+    else if (!visible && index === -1) values.push(key);
+    values.sort();
+    return JSON.stringify(values);
+}
+
 // Pick a provider's primary weekly window. Claude exposes both a general
 // weekly window and optional scoped weekly windows; only the general one is a
 // panel headline. Codex currently reports its 7-day limit as `primary`.

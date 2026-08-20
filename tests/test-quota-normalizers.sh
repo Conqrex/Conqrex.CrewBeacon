@@ -24,6 +24,14 @@ jq -e '
   and .gauges[0].pct == 15
 ' >/dev/null <<<"$codex"
 
+codex_dynamic="$(bash "$HELPER" _normalize-codex "$FIXTURES/codex-additional-rate-limits.json" "$CAPTURED_AT")"
+jq -e '
+  [.gauges[].id] == ["primary", "codex-bengalfox-primary", "codex-bengalfox-secondary", "future-model-burst"]
+  and [.gauges[].label] == ["Weekly", "GPT-5.3-Codex-Spark · 5-hour", "GPT-5.3-Codex-Spark · Weekly", "Future Model · 1D"]
+  and [.gauges[].cap] == ["7D", "5H", "7D", "1D"]
+  and [.gauges[].pct] == [28, 0, 49, 7]
+' >/dev/null <<<"$codex_dynamic"
+
 opencode="$(bash "$HELPER" _normalize-opencode "$FIXTURES/opencode-go-usage.json" "$CAPTURED_AT")"
 jq -e '
   .provider == "opencode" and .plan == "Go"
