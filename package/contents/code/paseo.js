@@ -339,6 +339,36 @@ function usageEventFromStream(source, session, payload) {
     };
 }
 
+function timelineAgentIds(sessions) {
+    var ids = [];
+    var seen = {};
+    var list = Array.isArray(sessions) ? sessions : [];
+    for (var i = 0; i < list.length; i++) {
+        var session = list[i] || {};
+        var id = stringValue(session.id);
+        if (!id || seen[id]) continue;
+        if (!activeState(session.state) && !isAttentionState(session.state)) continue;
+        seen[id] = true;
+        ids.push(id);
+    }
+    ids.sort();
+    return ids;
+}
+
+// Agent timelines contain high-volume token/output chunks that CrewBeacon does
+// not display. Reject those before JSON.parse so plasmashell does not build a
+// large temporary object graph for every streamed fragment.
+function shouldParseEnvelopeText(text) {
+    if (typeof text !== "string" || text.indexOf('"agent_stream"') === -1) return true;
+    return text.indexOf('"turn_completed"') !== -1
+        || text.indexOf('"attention_required"') !== -1;
+}
+
+function isLoopbackEndpoint(endpoint) {
+    var value = stringValue(endpoint).toLowerCase();
+    return /^wss?:\/\/(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:\/|$)/.test(value);
+}
+
 function attentionEventFromMessage(source, message, sessionMap) {
     source = isObject(source) ? source : {};
     message = isObject(message) ? message : {};

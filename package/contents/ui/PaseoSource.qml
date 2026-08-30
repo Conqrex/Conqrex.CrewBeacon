@@ -17,9 +17,12 @@ Item {
     readonly property string transport: (sourceConfig && sourceConfig.transport) || "direct"
     readonly property bool isRelay: transport === "relay"
     readonly property string endpoint: (sourceConfig && sourceConfig.endpoint) || "ws://127.0.0.1:6767/ws"
+    readonly property bool isLoopbackDirect: !isRelay && Paseo.isLoopbackEndpoint(endpoint)
+    readonly property bool usesSnapshotHelper: isRelay || isLoopbackDirect
     readonly property string offerFile: (sourceConfig && sourceConfig.offerFile) || ""
     readonly property bool sourceEnabled: !sourceConfig || sourceConfig.enabled !== false
     property int retentionHours: 24
+    property bool timelineEnabled: true
     readonly property string relayHelperPath:
         Qt.resolvedUrl("../code/crewbeacon_paseo_relay.py").toString().replace(/^file:\/\//, "")
 
@@ -36,6 +39,7 @@ Item {
     property int unknownMessageCount: 0
     property var seenEventMap: ({})
     property var seenEventOrder: []
+    property string timelineSubscriptionKey: "\u0000"
     property string agentsRequestId: ""
     property string workspacesRequestId: ""
     property string lastSeenAt: ""
@@ -51,7 +55,7 @@ Item {
     }
 
     function hostModel() {
-        if (isRelay && relayHost && relayHost.id) {
+        if (usesSnapshotHelper && relayHost && relayHost.id) {
             return {
                 id: relayHost.id,
                 name: relayHost.name || sourceName,
@@ -64,7 +68,7 @@ Item {
                 error: connectionError,
                 compatible: compatible,
                 unknownMessages: 0,
-                transport: "relay"
+                transport: relayHost.transport || transport
             }
         }
         return {
@@ -109,6 +113,12 @@ Item {
     }
 
     function relayCommand() {
+        if (isLoopbackDirect) {
+            return "python3 " + shq(relayHelperPath) + " local-snapshot"
+                 + " --endpoint " + shq(endpoint)
+                 + " --source-id " + shq(sourceId)
+                 + " --source-name " + shq(sourceName)
+        }
         return "python3 " + shq(relayHelperPath) + " snapshot"
              + " --offer-file " + shq(offerFile)
              + " --source-id " + shq(sourceId)
@@ -116,7 +126,7 @@ Item {
     }
 
     function pollRelay() {
-        if (!sourceEnabled || !isRelay || relayBusy) return
+        if (!sourceEnabled || !usesSnapshotHelper || relayBusy) return
         if (!validEndpoint()) {
             connectionState = "Failed"
             connectionError = "Choose a 0600 file containing the Paseo offer URL"
@@ -157,7 +167,7 @@ Item {
             emitSnapshot()
             return
         }
-        if (isRelay) {
+        if (usesSnapshotHelper) {
             socketWanted = false
             compatible = true
             connectionError = ""
@@ -181,14 +191,15 @@ Item {
     }
 
     function refresh() {
-        if (isRelay) { pollRelay(); return }
+        if (usesSnapshotHelper) { pollRelay(); return }
         if (connectionState === "Connected") requestSnapshots()
         else start()
     }
 
     function scheduleReconnect(reason) {
         socketWanted = false
-        if (isRelay) return
+        timelineSubscriptionKey = "\u0000"
+        if (usesSnapshotHelper) return
         if (!sourceEnabled || !compatible || reconnectTimer.running) return
         connectionState = "Disconnected"
         connectionError = reason || socket.errorString || "Connection closed"
@@ -245,29 +256,27 @@ Item {
             requestId: agentsRequestId,
             filter: { includeArchived: false },
             sort: [{ key: "updated_at", direction: "desc" }],
-            page: { limit: 200 },
-            subscribe: { subscriptionId: "crewbeacon-agents-" + sourceId }
+            page: { limit: 200 }
         })
         sendSession({
             type: "fetch_workspaces_request",
             requestId: workspacesRequestId,
             sort: [{ key: "activity_at", direction: "desc" }],
-            page: { limit: 200 },
-            subscribe: { subscriptionId: "crewbeacon-workspaces-" + sourceId }
+            page: { limit: 200 }
         })
     }
 
     function subscribeTimelines() {
         var features = serverInfo.features || {}
         if (features.selectiveAgentTimeline !== true) return
-        var ids = []
-        for (var id in agentEntryMap) ids.push(id)
-        ids.sort()
-        sendSession({
+        var ids = timelineEnabled ? Paseo.timelineAgentIds(sessions) : []
+        var key = ids.join("\u001f")
+        if (key === timelineSubscriptionKey) return
+        if (sendSession({
             type: "agent.timeline.set_subscription.request",
             agentIds: ids,
             requestId: randomId("timeline")
-        })
+        })) timelineSubscriptionKey = key
     }
 
     function rebuildSessions() {
@@ -293,16 +302,12 @@ Item {
     function rememberEvent(key) {
         if (!key) return false
         if (seenEventMap[key]) return false
-        var map = seenEventMap
-        var order = seenEventOrder.slice()
-        map[key] = true
-        order.push(key)
-        while (order.length > 2048) {
-            var dropped = order.shift()
-            delete map[dropped]
+        seenEventMap[key] = true
+        seenEventOrder.push(key)
+        while (seenEventOrder.length > 2048) {
+            var dropped = seenEventOrder.shift()
+            delete seenEventMap[dropped]
         }
-        seenEventMap = map
-        seenEventOrder = order
         return true
     }
 
@@ -414,6 +419,7 @@ Item {
     }
 
     function handleText(text) {
+        if (!Paseo.shouldParseEnvelopeText(text)) return
         var envelope
         try { envelope = JSON.parse(text) }
         catch (error) { unknownMessageCount += 1; return }
@@ -429,7 +435,7 @@ Item {
     WebSocket {
         id: socket
         url: sourceItem.endpoint
-        active: sourceItem.socketWanted && !sourceItem.isRelay
+        active: sourceItem.socketWanted && !sourceItem.usesSnapshotHelper
         requestedSubprotocols: []
         onTextMessageReceived: (message) => sourceItem.handleText(message)
         onStatusChanged: (status) => {
@@ -467,7 +473,6 @@ Item {
         id: relayExec
         engine: "executable"
         connectedSources: []
-        property int serial: 0
         onNewData: (source, data) => {
             var parsed = null
             try { parsed = JSON.parse(("" + (data["stdout"] || "")).trim()) }
@@ -477,22 +482,33 @@ Item {
             disconnectSource(source)
         }
         function run(command) {
-            serial += 1
-            connectSource(command + " # crewbeacon-relay-" + serial)
+            connectSource(command)
         }
     }
 
     Timer {
         id: relayPoll
-        interval: 20000
+        interval: 300000
         repeat: true
         triggeredOnStart: true
-        running: sourceItem.sourceEnabled && sourceItem.isRelay
+        running: sourceItem.sourceEnabled && sourceItem.usesSnapshotHelper
         onTriggered: sourceItem.pollRelay()
+    }
+
+    Timer {
+        interval: 120000
+        repeat: true
+        running: sourceItem.sourceEnabled && !sourceItem.usesSnapshotHelper
+              && sourceItem.connectionState === "Connected"
+        onTriggered: sourceItem.requestSnapshots()
     }
 
     onSourceConfigChanged: start()
     onSourceEnabledChanged: start()
+    onTimelineEnabledChanged: {
+        timelineSubscriptionKey = "\u0000"
+        if (connectionState === "Connected") subscribeTimelines()
+    }
     Component.onCompleted: start()
     Component.onDestruction: {
         reconnectTimer.stop()

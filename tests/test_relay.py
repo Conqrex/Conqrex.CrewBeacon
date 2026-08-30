@@ -5,7 +5,9 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = (
@@ -64,6 +66,27 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(result["repositoryName"], "project")
         self.assertFalse(result["capabilities"]["canReadTokenUsage"])
         self.assertFalse(result["capabilities"]["canStreamSessionState"])
+
+    @mock.patch.object(relay, "fetch_agents")
+    @mock.patch.object(relay, "find_cli", return_value="/usr/bin/paseo")
+    def test_local_snapshot_uses_cli_without_relay_offer(self, _find_cli, fetch_agents):
+        fetch_agents.return_value = [{
+            "id": "agent-1",
+            "name": "Local agent",
+            "provider": "codex/gpt-5",
+            "status": "idle",
+            "cwd": "/srv/project",
+        }]
+        result = relay.local_snapshot(SimpleNamespace(
+            endpoint="ws://127.0.0.1:6767/ws",
+            source_id="local",
+            source_name="Local Paseo",
+        ))
+
+        fetch_agents.assert_called_once_with("/usr/bin/paseo")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["host"]["transport"], "direct")
+        self.assertEqual(result["sessions"][0]["sourceId"], "local")
 
 
 if __name__ == "__main__":

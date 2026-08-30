@@ -79,6 +79,29 @@ assert.match(attention.dedupKey, /question-1$/);
 assert.equal(adapter.attentionEventFromMessage(fixture.source, { type: "future_message" }, sessionMap), null);
 assert.equal(adapter.usageEventFromStream(fixture.source, normalized, { event: { type: "future" } }), null);
 
+assert.equal(Array.from(adapter.timelineAgentIds([
+  { id: "idle", state: "Idle" },
+  { id: "working-b", state: "Working" },
+  { id: "attention", state: "WaitingForInput" },
+  { id: "working-a", state: "Connecting" },
+  { id: "working-b", state: "Working" },
+])).join(","), "attention,working-a,working-b",
+"timeline subscriptions include only unique active or attention sessions");
+
+assert.equal(adapter.shouldParseEnvelopeText(
+  '{"type":"session","message":{"type":"agent_stream","payload":{"event":{"type":"token"}}}}'
+), false, "irrelevant high-volume timeline chunks are rejected before parsing");
+assert.equal(adapter.shouldParseEnvelopeText(
+  '{"type":"session","message":{"type":"agent_stream","payload":{"event":{"type":"turn_completed"}}}}'
+), true, "usage-bearing stream events remain observable");
+assert.equal(adapter.shouldParseEnvelopeText(
+  '{"type":"session","message":{"type":"agent_update"}}'
+), true, "non-stream protocol messages remain observable");
+assert.equal(adapter.isLoopbackEndpoint("ws://127.0.0.1:6767/ws"), true);
+assert.equal(adapter.isLoopbackEndpoint("wss://localhost:6767/ws"), true);
+assert.equal(adapter.isLoopbackEndpoint("ws://[::1]:6767/ws"), true);
+assert.equal(adapter.isLoopbackEndpoint("wss://paseo.example.com/ws"), false);
+
 assert.equal(adapter.reconnectDelay(0, 0), 1500);
 assert.equal(adapter.reconnectDelay(1, 0), 3000);
 assert.equal(adapter.reconnectDelay(99, 0), 30000);

@@ -448,6 +448,32 @@ def record_usage(db: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, A
     return {"ok": True, "inserted": inserted, "usage": usage_snapshot(db)}
 
 
+def record_usage_batch(db: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    """Persist a bounded group without rebuilding the expensive usage rollups.
+
+    Live Paseo streams can emit several usage deltas per second. Keeping the
+    aggregate read separate lets the QML client debounce it while this write is
+    completed in one SQLite transaction.
+    """
+    events = payload.get("events")
+    if not isinstance(events, list):
+        raise ValueError("usage batch requires an events array")
+    if len(events) > 1000:
+        raise ValueError("usage batch cannot exceed 1000 events")
+
+    inserted = 0
+    for event in events:
+        if not isinstance(event, dict):
+            raise ValueError("usage batch events must be objects")
+        inserted += int(insert_usage_event(db, event))
+    db.commit()
+    return {
+        "ok": True,
+        "inserted": inserted,
+        "duplicates": len(events) - inserted,
+    }
+
+
 def normalize_git_remote(value: str) -> str:
     remote = value.strip()
     if not remote:
@@ -1152,8 +1178,8 @@ def emit(value: dict[str, Any]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=[
-        "init", "snapshot", "sync-snapshot", "record-usage", "record-attention",
-        "usage-day", "import-local-usage",
+        "init", "snapshot", "usage-snapshot", "sync-snapshot", "record-usage",
+        "record-usage-batch", "record-attention", "usage-day", "import-local-usage",
     ])
     parser.add_argument("payload", nargs="?", default="{}")
     parser.add_argument("--retention-hours", type=int, default=24)
@@ -1165,10 +1191,14 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"ok": True, "schemaVersion": SCHEMA_VERSION, "path": str(database_path())})
             elif args.command == "snapshot":
                 emit(stored_snapshot(db, args.retention_hours))
+            elif args.command == "usage-snapshot":
+                emit({"ok": True, "usage": usage_snapshot(db)})
             elif args.command == "sync-snapshot":
                 emit(sync_snapshot(db, payload_arg(args.payload)))
             elif args.command == "record-usage":
                 emit(record_usage(db, payload_arg(args.payload)))
+            elif args.command == "record-usage-batch":
+                emit(record_usage_batch(db, payload_arg(args.payload)))
             elif args.command == "record-attention":
                 emit(record_attention(db, payload_arg(args.payload)))
             elif args.command == "usage-day":

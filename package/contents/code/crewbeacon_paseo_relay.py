@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -112,9 +113,12 @@ def safe_cli_error(stderr: str) -> str:
     return (text[:240] or "Paseo CLI relay request failed")
 
 
-def fetch_agents(cli: str, offer: str) -> list[dict[str, Any]]:
+def fetch_agents(cli: str, offer: str | None = None) -> list[dict[str, Any]]:
     environment = os.environ.copy()
-    environment["PASEO_HOST"] = offer
+    if offer:
+        environment["PASEO_HOST"] = offer
+    else:
+        environment.pop("PASEO_HOST", None)
     # A user shell may globally disable Node TLS verification. Never inherit
     # that weakening for the relay transport.
     environment["NODE_TLS_REJECT_UNAUTHORIZED"] = "1"
@@ -234,6 +238,34 @@ def snapshot(args: argparse.Namespace) -> dict[str, Any]:
     return {"ok": True, "host": host, "sessions": sessions}
 
 
+def local_snapshot(args: argparse.Namespace) -> dict[str, Any]:
+    cli = find_cli()
+    entries = fetch_agents(cli)
+    server_id = "local-paseo"
+    sessions = [
+        normalized
+        for entry in entries
+        if (normalized := normalize_agent(
+            entry, args.source_id, args.source_name, server_id
+        ))
+    ]
+    host = {
+        "id": args.source_id,
+        "name": args.source_name,
+        "endpoint": args.endpoint,
+        "serverId": server_id,
+        "hostname": socket.gethostname(),
+        "version": "CLI local",
+        "connectionState": "Connected",
+        "lastSeenAt": "",
+        "error": "",
+        "compatible": True,
+        "unknownMessages": 0,
+        "transport": "direct",
+    }
+    return {"ok": True, "host": host, "sessions": sessions}
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser()
     subcommands = result.add_subparsers(dest="command", required=True)
@@ -241,13 +273,17 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--offer-file", required=True)
     command.add_argument("--source-id", required=True)
     command.add_argument("--source-name", required=True)
+    local = subcommands.add_parser("local-snapshot")
+    local.add_argument("--endpoint", required=True)
+    local.add_argument("--source-id", required=True)
+    local.add_argument("--source-name", required=True)
     return result
 
 
 def main() -> int:
     args = parser().parse_args()
     try:
-        output = snapshot(args)
+        output = local_snapshot(args) if args.command == "local-snapshot" else snapshot(args)
     except RelayError as exc:
         output = {"ok": False, "error": str(exc), "host": None, "sessions": []}
     json.dump(output, sys.stdout, separators=(",", ":"))

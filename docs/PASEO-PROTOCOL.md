@@ -105,6 +105,11 @@ protocol-1 hello is therefore accepted across Paseo product releases.
 
 ## Read-only requests
 
+Loopback sources are sampled through the official local Paseo CLI and
+normalized in a short-lived helper process. This keeps large agent snapshots
+out of plasmashell while preserving read-only behavior. Remote direct sources
+use the WebSocket requests below; relay sources use the CLI offer-link flow.
+
 All session protocol messages are wrapped as:
 
 ```json
@@ -119,8 +124,7 @@ CrewBeacon sends only these read/subscription requests:
   "requestId": "…",
   "filter": {"includeArchived": false},
   "sort": [{"key":"updated_at","direction":"desc"}],
-  "page": {"limit": 200},
-  "subscribe": {"subscriptionId":"…"}
+  "page": {"limit": 200}
 }
 ```
 
@@ -129,8 +133,7 @@ CrewBeacon sends only these read/subscription requests:
   "type": "fetch_workspaces_request",
   "requestId": "…",
   "sort": [{"key":"activity_at","direction":"desc"}],
-  "page": {"limit": 200},
-  "subscribe": {"subscriptionId":"…"}
+  "page": {"limit": 200}
 }
 ```
 

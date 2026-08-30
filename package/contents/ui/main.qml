@@ -28,6 +28,7 @@ PlasmoidItem {
     property var storedSnapshot: ({ sessions: [], hosts: [], usage: { ranges: {} } })
     property var usageDayDetail: ({ ok: true, date: "", repositories: [], providers: [], sessions: [], events: [] })
     property bool localImportRunning: false
+    property var pendingUsageEvents: []
     readonly property var configuredPaseoSources: parsePaseoSources(
         Plasmoid.configuration.showPaseoAgents,
         Plasmoid.configuration.paseoSources)
@@ -222,10 +223,10 @@ PlasmoidItem {
     readonly property string activityCmd: "bash '" + scriptPath + "' activity"
 
     function acceptSourceSnapshot(sourceId, snapshot) {
-        var live = sourceSnapshots
+        var live = Object.assign({}, sourceSnapshots)
         live[sourceId] = snapshot
         sourceSnapshots = live
-        var pending = pendingSnapshots
+        var pending = Object.assign({}, pendingSnapshots)
         pending[sourceId] = snapshot
         pendingSnapshots = pending
         persistSnapshotsTimer.restart()
@@ -255,7 +256,26 @@ PlasmoidItem {
     }
 
     function recordUsageEvent(event) {
-        storeCall("record-usage", event, function(result) {
+        var pending = pendingUsageEvents.slice()
+        pending.push(event)
+        pendingUsageEvents = pending
+        if (pending.length >= 64) flushUsageEvents()
+        else usageFlushTimer.restart()
+    }
+
+    function flushUsageEvents() {
+        if (pendingUsageEvents.length === 0) return
+        var events = pendingUsageEvents
+        pendingUsageEvents = []
+        usageFlushTimer.stop()
+        storeCall("record-usage-batch", { events: events }, function(result) {
+            if (!result || result.ok === false || result.inserted < 1) return
+            usageRefreshTimer.restart()
+        })
+    }
+
+    function refreshUsageSnapshot() {
+        storeCall("usage-snapshot", null, function(result) {
             if (!result || result.ok === false || !result.usage) return
             storedSnapshot = {
                 sessions: storedSnapshot.sessions || [],
@@ -767,6 +787,10 @@ PlasmoidItem {
             required property var modelData
             sourceConfig: modelData
             retentionHours: Math.max(1, Plasmoid.configuration.agentRetentionHours)
+            // Local log import already records localhost usage. Avoid sending
+            // every local token stream through plasmashell a second time.
+            timelineEnabled: !Plasmoid.configuration.recordLocalUsage
+                || !Paseo.isLoopbackEndpoint(endpoint)
             onSnapshotChanged: (snapshot) => root.acceptSourceSnapshot(sourceId, snapshot)
             onUsageObserved: (event) => root.recordUsageEvent(event)
             onAttentionObserved: (event) => root.recordAttentionEvent(event)
@@ -792,27 +816,57 @@ PlasmoidItem {
         }
     }
 
+    // Paseo can emit several deltas per second. Persist them in one transaction
+    // and rebuild the comparatively expensive calendar/range rollups at most
+    // once per burst.
+    Timer {
+        id: usageFlushTimer
+        interval: 1000
+        repeat: false
+        onTriggered: root.flushUsageEvents()
+    }
+
+    Timer {
+        id: usageRefreshTimer
+        interval: 5000
+        repeat: false
+        onTriggered: root.refreshUsageSnapshot()
+    }
+
     Plasma5Support.DataSource {
         id: storeExec
         engine: "executable"
         connectedSources: []
-        property var callbacks: ({})
-        property int serial: 0
+        property var queue: []
+        property string activeSource: ""
+        property var activeCallback: null
         onNewData: (source, data) => {
-            var callback = callbacks[source]
-            delete callbacks[source]
+            if (source !== activeSource) return
+            var callback = activeCallback
+            activeSource = ""
+            activeCallback = null
             var parsed = null
             try { parsed = JSON.parse(("" + (data["stdout"] || "")).trim()) }
             catch (error) { parsed = { ok: false, error: "store_parse_error" } }
-            if (callback) callback(parsed, data["exit code"])
             disconnectSource(source)
+            if (callback) callback(parsed, data["exit code"])
+            Qt.callLater(startNext)
         }
         function run(command, callback) {
             if (!command) return
-            serial += 1
-            var unique = command + " # crewbeacon-store-" + serial
-            callbacks[unique] = callback || function() {}
-            connectSource(unique)
+            var next = queue.slice()
+            next.push({ command: command, callback: callback || function() {} })
+            queue = next
+            startNext()
+        }
+        function startNext() {
+            if (activeSource || queue.length === 0) return
+            var next = queue.slice()
+            var job = next.shift()
+            queue = next
+            activeSource = job.command
+            activeCallback = job.callback
+            connectSource(activeSource)
         }
     }
 
@@ -885,21 +939,34 @@ PlasmoidItem {
         id: activityExec
         engine: "executable"
         connectedSources: []
+        property bool busy: false
+        property string lastPayload: ""
         onNewData: (source, data) => {
+            busy = false
             if (data["exit code"] === 0) {
+                var payload = ("" + data["stdout"]).trim()
+                if (payload === lastPayload) {
+                    disconnectSource(source)
+                    return
+                }
                 try {
-                    var act = JSON.parse(("" + data["stdout"]).trim());
+                    var act = JSON.parse(payload);
+                    lastPayload = payload
                     root.assistantActivity = act;
                     root.checkActivityAlerts(act);
                 } catch (e) { /* keep previous state on a transient parse error */ }
             }
             disconnectSource(source);
         }
-        function run(cmd) { if (cmd) connectSource(cmd); }
+        function run(cmd) {
+            if (!cmd || busy) return
+            busy = true
+            connectSource(cmd)
+        }
     }
     // Local session rows and alerts work even when the panel dot is hidden.
     Timer {
-        interval: 3000
+        interval: 15000
         running: Plasmoid.configuration.showLocalSessions
               || Plasmoid.configuration.showActivity
               || Plasmoid.configuration.notifyNeedsYou

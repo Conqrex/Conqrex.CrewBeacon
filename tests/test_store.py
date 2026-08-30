@@ -202,6 +202,25 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(snapshot["ranges"]["today"]["totalTokens"], 140)
         self.assertEqual(snapshot["ranges"]["today"]["repositories"][0]["cacheReadTokens"], 60)
 
+    def test_usage_batch_persists_once_without_building_snapshot(self):
+        with store.connect() as db:
+            result = store.record_usage_batch(db, {"events": [
+                self.usage_event("batch-1", "2026-08-09T10:00:00Z"),
+                self.usage_event("batch-2", "2026-08-09T10:01:00Z"),
+                self.usage_event("batch-1", "2026-08-09T10:00:00Z"),
+            ]})
+            count = db.execute("SELECT COUNT(*) FROM usage_events").fetchone()[0]
+
+        self.assertEqual(result, {"ok": True, "inserted": 2, "duplicates": 1})
+        self.assertEqual(count, 2)
+
+    def test_usage_batch_rejects_invalid_payload(self):
+        with store.connect() as db:
+            with self.assertRaisesRegex(ValueError, "events array"):
+                store.record_usage_batch(db, {})
+            with self.assertRaisesRegex(ValueError, "must be objects"):
+                store.record_usage_batch(db, {"events": ["invalid"]})
+
     def test_local_day_week_and_month_boundaries(self):
         # Europe/Istanbul local midnight for Aug 9 is Aug 8 21:00 UTC.
         fixed = datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc)
